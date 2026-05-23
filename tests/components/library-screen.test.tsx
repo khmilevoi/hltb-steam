@@ -4,13 +4,6 @@ import { LibraryScreen } from '@/app/library/library-screen'
 import type { HltbEntry, SteamGame } from '@/types/game'
 
 const filtersStorageKey = 'hltb-steam:library-filters'
-const sortingStorageKey = 'hltb-steam:library-sorting'
-
-function visibleGameNames() {
-  return Array.from(document.querySelectorAll('tbody tr')).map(
-    (row) => row.querySelectorAll('td')[1]?.textContent,
-  )
-}
 
 vi.mock('@tanstack/react-query', () => ({
   useQueryClient: () => ({}),
@@ -84,8 +77,8 @@ describe('LibraryScreen filter persistence', () => {
       ),
     )
     expect(screen.getByText('HLTB Main: 1h - 5h')).toBeTruthy()
-    expect(screen.getByText('Portal')).toBeTruthy()
-    expect(screen.queryByText('Hades')).toBeNull()
+    expect(screen.getByRole('img', { name: 'Portal' })).toBeTruthy()
+    expect(screen.queryByRole('img', { name: 'Hades' })).toBeNull()
   })
 
   it('saves changed filters to localStorage', () => {
@@ -98,28 +91,6 @@ describe('LibraryScreen filter persistence', () => {
     expect(JSON.parse(localStorage.getItem(filtersStorageKey) ?? '{}')).toMatchObject({
       query: 'Hades',
       hltbRange: [0, 9999],
-    })
-  })
-})
-
-describe('LibraryScreen sorting persistence', () => {
-  it('restores sorting from localStorage', async () => {
-    localStorage.setItem(sortingStorageKey, JSON.stringify([{ id: 'steamHours', desc: false }]))
-
-    render(<LibraryScreen />)
-
-    await waitFor(() => expect(visibleGameNames()[0]).toBe('Portal'))
-  })
-
-  it('saves changed sorting to localStorage', async () => {
-    render(<LibraryScreen />)
-
-    fireEvent.click(screen.getByText('Steam played'))
-
-    await waitFor(() => {
-      expect(JSON.parse(localStorage.getItem(sortingStorageKey) ?? '[]')[0]).toMatchObject({
-        id: 'steamHours',
-      })
     })
   })
 })

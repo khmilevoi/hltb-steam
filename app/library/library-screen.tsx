@@ -1,6 +1,5 @@
 'use client'
 
-import type { SortingState } from '@tanstack/react-table'
 import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
@@ -17,19 +16,10 @@ import { filterByHltbRange, searchByName } from '@/lib/library/filters'
 import { mergeGames } from '@/lib/library/merge'
 
 const LIBRARY_FILTERS_STORAGE_KEY = 'hltb-steam:library-filters'
-const LIBRARY_SORTING_STORAGE_KEY = 'hltb-steam:library-sorting'
-const SORTABLE_COLUMN_IDS = [
-  'name',
-  'steamHours',
-  'hltbMain',
-  'hltbMainExtra',
-  'hltbCompletionist',
-] as const
 const DEFAULT_LIBRARY_FILTERS: LibraryFiltersValue = {
   query: '',
   hltbRange: [0, 9999],
 }
-const DEFAULT_LIBRARY_SORTING: SortingState = [{ id: 'name', desc: false }]
 
 function parseStoredFilters(value: string | null): LibraryFiltersValue | null {
   if (!value) return null
@@ -50,35 +40,6 @@ function parseStoredFilters(value: string | null): LibraryFiltersValue | null {
       return null
     }
     return { query, hltbRange: [min, max] }
-  } catch {
-    return null
-  }
-}
-
-function parseStoredSorting(value: string | null): SortingState | null {
-  if (!value) return null
-
-  try {
-    const parsed = JSON.parse(value) as unknown
-    if (!Array.isArray(parsed)) return null
-
-    const sorting: SortingState = []
-    for (const item of parsed) {
-      if (
-        typeof item !== 'object' ||
-        item === null ||
-        !('id' in item) ||
-        !('desc' in item) ||
-        typeof item.id !== 'string' ||
-        typeof item.desc !== 'boolean' ||
-        !SORTABLE_COLUMN_IDS.includes(item.id as (typeof SORTABLE_COLUMN_IDS)[number])
-      ) {
-        return null
-      }
-      sorting.push({ id: item.id, desc: item.desc })
-    }
-
-    return sorting
   } catch {
     return null
   }
@@ -105,8 +66,6 @@ export function LibraryScreen() {
 
   const [filters, setFilters] = useState<LibraryFiltersValue>(DEFAULT_LIBRARY_FILTERS)
   const [filtersLoaded, setFiltersLoaded] = useState(false)
-  const [sorting, setSorting] = useState<SortingState>(DEFAULT_LIBRARY_SORTING)
-  const [sortingLoaded, setSortingLoaded] = useState(false)
 
   const visibleRows = useMemo(() => {
     const searched = searchByName(rows, filters.query)
@@ -143,27 +102,6 @@ export function LibraryScreen() {
       // Filtering should keep working even when persistence is unavailable.
     }
   }, [filters, filtersLoaded])
-
-  useEffect(() => {
-    try {
-      const storedSorting = parseStoredSorting(
-        window.localStorage.getItem(LIBRARY_SORTING_STORAGE_KEY),
-      )
-      if (storedSorting) setSorting(storedSorting)
-    } catch {
-      // localStorage can be unavailable in restricted browser contexts.
-    }
-    setSortingLoaded(true)
-  }, [])
-
-  useEffect(() => {
-    if (!sortingLoaded) return
-    try {
-      window.localStorage.setItem(LIBRARY_SORTING_STORAGE_KEY, JSON.stringify(sorting))
-    } catch {
-      // Sorting should keep working even when persistence is unavailable.
-    }
-  }, [sorting, sortingLoaded])
 
   useEffect(() => {
     if (hltb.isError && hltb.error) {
@@ -223,12 +161,7 @@ export function LibraryScreen() {
           ))}
         </div>
       ) : (
-        <LibraryTable
-          rows={visibleRows}
-          hltbLoading={hltb.isFetching}
-          sorting={sorting}
-          onSortingChange={setSorting}
-        />
+        <LibraryTable rows={visibleRows} hltbLoading={hltb.isFetching} />
       )}
     </main>
   )
