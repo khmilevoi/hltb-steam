@@ -10,7 +10,7 @@ Follow `docs/superpowers/plans/2026-05-23-hltb-steam.md` task-by-task, using foc
 
 ## Phases
 
-- [ ] Phase 0: Inspect spec, plan, goal contract, control surface, and repo state.
+- [x] Phase 0: Inspect spec, plan, goal contract, control surface, and repo state.
 - [ ] Phase 1: Scaffold Next.js, dependencies, Vitest, and shadcn/ui.
 - [ ] Phase 2: Implement domain logic and tested server-side adapters.
 - [ ] Phase 3: Implement auth, API routes, client hooks, and providers.
@@ -19,7 +19,7 @@ Follow `docs/superpowers/plans/2026-05-23-hltb-steam.md` task-by-task, using foc
 
 ## Current Phase
 
-Phase 0: orientation and scaffold preparation.
+Phase 1: Next.js scaffold and tooling setup.
 
 ## Open Decisions
 
