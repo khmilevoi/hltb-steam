@@ -40,7 +40,6 @@ The errore convention uses `await using` / `DisposableStack`. Open `tsconfig.jso
   "compilerOptions": {
     "lib": ["dom", "dom.iterable", "ESNext", "ESNext.Disposable"],
     "strict": true,
-    "noUncheckedIndexedAccess": true,
     "module": "esnext",
     "moduleResolution": "bundler",
     "paths": { "@/*": ["./*"] }
@@ -48,7 +47,7 @@ The errore convention uses `await using` / `DisposableStack`. Open `tsconfig.jso
 }
 ```
 
-`noUncheckedIndexedAccess` makes our `Record<appid, HltbEntry | null>` lookups type-safe.
+> We intentionally do NOT enable `noUncheckedIndexedAccess` for this MVP. It would force `!` assertions or `if (!x) return` guards on every array index and `Record` lookup (e.g. `scored[0]` in `pickBestMatch`, `rows[0]` in tests, `entries[appid]` in route handlers) without adding real value — our indices are deterministic by construction. Reconsider for a future hardening pass if the codebase grows.
 
 - [ ] **Step 3: Create `.env.local.example`**
 
