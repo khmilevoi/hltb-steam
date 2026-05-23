@@ -2152,6 +2152,9 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
 import { Skeleton } from '@/components/ui/skeleton'
+import {
+  Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
+} from '@/components/ui/tooltip'
 import type { GameRow } from '@/types/game'
 
 function hours(minutes: number) { return (minutes / 60).toFixed(1) }
@@ -2160,7 +2163,17 @@ function hltbCell(value: number | null, isLoading: boolean, rowHasHltb: boolean)
   // Show a skeleton in HLTB columns while the batch is still loading
   // AND we don't yet have an entry for this row.
   if (isLoading && !rowHasHltb) return <Skeleton className="h-4 w-10" />
-  return value === null ? <span className="text-muted-foreground">—</span> : `${value}h`
+  if (value === null) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="text-muted-foreground cursor-help">—</span>
+        </TooltipTrigger>
+        <TooltipContent>HLTB data unavailable</TooltipContent>
+      </Tooltip>
+    )
+  }
+  return `${value}h`
 }
 
 function buildColumns(hltbLoading: boolean): ColumnDef<GameRow>[] {
@@ -2195,7 +2208,10 @@ function buildColumns(hltbLoading: boolean): ColumnDef<GameRow>[] {
     {
       id: 'hltbMain',
       header: 'HLTB Main',
-      accessorFn: (r) => r.hltb?.mainHours ?? null,
+      // accessorFn returns undefined (not null) for missing values so that
+      // sortUndefined: 'last' actually parks them at the end of the list
+      // for both asc and desc directions.
+      accessorFn: (r) => r.hltb?.mainHours ?? undefined,
       cell: ({ row }) =>
         hltbCell(row.original.hltb?.mainHours ?? null, hltbLoading, row.original.hltb !== null),
       sortUndefined: 'last',
@@ -2203,7 +2219,7 @@ function buildColumns(hltbLoading: boolean): ColumnDef<GameRow>[] {
     {
       id: 'hltbMainExtra',
       header: 'HLTB +Extra',
-      accessorFn: (r) => r.hltb?.mainExtraHours ?? null,
+      accessorFn: (r) => r.hltb?.mainExtraHours ?? undefined,
       cell: ({ row }) =>
         hltbCell(row.original.hltb?.mainExtraHours ?? null, hltbLoading, row.original.hltb !== null),
       sortUndefined: 'last',
@@ -2211,7 +2227,7 @@ function buildColumns(hltbLoading: boolean): ColumnDef<GameRow>[] {
     {
       id: 'hltbCompletionist',
       header: 'HLTB 100%',
-      accessorFn: (r) => r.hltb?.completionistHours ?? null,
+      accessorFn: (r) => r.hltb?.completionistHours ?? undefined,
       cell: ({ row }) =>
         hltbCell(row.original.hltb?.completionistHours ?? null, hltbLoading, row.original.hltb !== null),
       sortUndefined: 'last',
@@ -2238,35 +2254,37 @@ export function LibraryTable({
   })
 
   return (
-    <Table>
-      <TableHeader>
-        {table.getHeaderGroups().map((hg) => (
-          <TableRow key={hg.id}>
-            {hg.headers.map((h) => (
-              <TableHead
-                key={h.id}
-                onClick={h.column.getCanSort() ? h.column.getToggleSortingHandler() : undefined}
-                className={h.column.getCanSort() ? 'cursor-pointer select-none' : ''}
-              >
-                {flexRender(h.column.columnDef.header, h.getContext())}
-                {h.column.getIsSorted() === 'asc' ? ' ▲' : h.column.getIsSorted() === 'desc' ? ' ▼' : ''}
-              </TableHead>
-            ))}
-          </TableRow>
-        ))}
-      </TableHeader>
-      <TableBody>
-        {table.getRowModel().rows.map((row) => (
-          <TableRow key={row.id}>
-            {row.getVisibleCells().map((cell) => (
-              <TableCell key={cell.id}>
-                {flexRender(cell.column.columnDef.cell, cell.getContext())}
-              </TableCell>
-            ))}
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+    <TooltipProvider delayDuration={200}>
+      <Table>
+        <TableHeader>
+          {table.getHeaderGroups().map((hg) => (
+            <TableRow key={hg.id}>
+              {hg.headers.map((h) => (
+                <TableHead
+                  key={h.id}
+                  onClick={h.column.getCanSort() ? h.column.getToggleSortingHandler() : undefined}
+                  className={h.column.getCanSort() ? 'cursor-pointer select-none' : ''}
+                >
+                  {flexRender(h.column.columnDef.header, h.getContext())}
+                  {h.column.getIsSorted() === 'asc' ? ' ▲' : h.column.getIsSorted() === 'desc' ? ' ▼' : ''}
+                </TableHead>
+              ))}
+            </TableRow>
+          ))}
+        </TableHeader>
+        <TableBody>
+          {table.getRowModel().rows.map((row) => (
+            <TableRow key={row.id}>
+              {row.getVisibleCells().map((cell) => (
+                <TableCell key={cell.id}>
+                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                </TableCell>
+              ))}
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </TooltipProvider>
   )
 }
 ```
