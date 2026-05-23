@@ -1,0 +1,14 @@
+.rdg {
+  --rdg-color: var(--foreground);
+  --rdg-background-color: var(--background);
+  --rdg-header-background-color: var(--muted);
+  --rdg-row-hover-background-color: color-mix(in oklch, var(--muted) 50%, transparent);
+  --rdg-border-color: var(--border);
+  --rdg-font-size: 0.875rem;
+  --rdg-selection-color: var(--ring);
+  block-size: 100%;
+}
+
+.rdg .rdg-header-row {
+  font-weight: 500;
+}
