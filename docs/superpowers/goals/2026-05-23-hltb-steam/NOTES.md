@@ -8,3 +8,4 @@
 - 2026-05-23: Current `create-next-app@latest` generated a `src/app` scaffold and modern Tailwind 4 files (`postcss.config.mjs`, no `tailwind.config`). The app directory was moved to root `app/` to preserve the approved project structure.
 - 2026-05-23: `next-auth-steam@0.4.0` installed as planned but reports peer warnings for Next 16 and Auth.js v5. Keep the dependency for now and validate the provider wiring in Task 13.
 - 2026-05-23: Current shadcn CLI no longer supports `--base-color`; project was initialized with Radix base and `nova` preset. Components use the current shadcn source format.
+- 2026-05-23: `errore@0.14.1` reserves `$name` in tagged-error message templates. `HltbFetchError` keeps the planned public constructor shape but uses `$gameName` internally for interpolation.
