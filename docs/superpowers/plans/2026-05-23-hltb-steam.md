@@ -1411,6 +1411,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth((req) => ({
       return session
     },
   },
+  pages: {
+    signIn: '/', // unauthenticated users hit our landing page instead of NextAuth default UI
+  },
   secret: process.env.NEXTAUTH_SECRET,
 }))
 ```
@@ -1573,7 +1576,7 @@ import { json } from '@/lib/http'
 import type { HltbEntry } from '@/types/game'
 
 const bodySchema = z.object({
-  games: z.array(z.object({ appid: z.number(), name: z.string() })).max(1000),
+  games: z.array(z.object({ appid: z.number(), name: z.string() })).max(5000),
   force: z.boolean().optional(),
 })
 
@@ -2143,71 +2146,88 @@ import {
   type ColumnDef,
   type SortingState,
 } from '@tanstack/react-table'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import Image from 'next/image'
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
+import { Skeleton } from '@/components/ui/skeleton'
 import type { GameRow } from '@/types/game'
 
 function hours(minutes: number) { return (minutes / 60).toFixed(1) }
-function hltbCell(v: number | null | undefined) {
-  return v === null || v === undefined ? <span className="text-muted-foreground">—</span> : `${v}h`
+
+function hltbCell(value: number | null, isLoading: boolean, rowHasHltb: boolean) {
+  // Show a skeleton in HLTB columns while the batch is still loading
+  // AND we don't yet have an entry for this row.
+  if (isLoading && !rowHasHltb) return <Skeleton className="h-4 w-10" />
+  return value === null ? <span className="text-muted-foreground">—</span> : `${value}h`
 }
 
-const columns: ColumnDef<GameRow>[] = [
-  {
-    id: 'cover',
-    header: '',
-    cell: ({ row }) => (
-      <Image
-        src={row.original.headerImageUrl}
-        alt={row.original.name}
-        width={92}
-        height={43}
-        unoptimized
-        className="rounded"
-      />
-    ),
-    enableSorting: false,
-  },
-  {
-    id: 'name',
-    accessorKey: 'name',
-    header: 'Name',
-    cell: ({ row }) => <span className="font-medium">{row.original.name}</span>,
-  },
-  {
-    id: 'steamHours',
-    header: 'Steam played',
-    accessorFn: (r) => r.playtimeMinutes,
-    cell: ({ row }) => `${hours(row.original.playtimeMinutes)}h`,
-  },
-  {
-    id: 'hltbMain',
-    header: 'HLTB Main',
-    accessorFn: (r) => r.hltb?.mainHours ?? null,
-    cell: ({ row }) => hltbCell(row.original.hltb?.mainHours ?? null),
-    sortUndefined: 'last',
-  },
-  {
-    id: 'hltbMainExtra',
-    header: 'HLTB +Extra',
-    accessorFn: (r) => r.hltb?.mainExtraHours ?? null,
-    cell: ({ row }) => hltbCell(row.original.hltb?.mainExtraHours ?? null),
-    sortUndefined: 'last',
-  },
-  {
-    id: 'hltbCompletionist',
-    header: 'HLTB 100%',
-    accessorFn: (r) => r.hltb?.completionistHours ?? null,
-    cell: ({ row }) => hltbCell(row.original.hltb?.completionistHours ?? null),
-    sortUndefined: 'last',
-  },
-]
+function buildColumns(hltbLoading: boolean): ColumnDef<GameRow>[] {
+  return [
+    {
+      id: 'cover',
+      header: '',
+      cell: ({ row }) => (
+        <Image
+          src={row.original.headerImageUrl}
+          alt={row.original.name}
+          width={92}
+          height={43}
+          unoptimized
+          className="rounded"
+        />
+      ),
+      enableSorting: false,
+    },
+    {
+      id: 'name',
+      accessorKey: 'name',
+      header: 'Name',
+      cell: ({ row }) => <span className="font-medium">{row.original.name}</span>,
+    },
+    {
+      id: 'steamHours',
+      header: 'Steam played',
+      accessorFn: (r) => r.playtimeMinutes,
+      cell: ({ row }) => `${hours(row.original.playtimeMinutes)}h`,
+    },
+    {
+      id: 'hltbMain',
+      header: 'HLTB Main',
+      accessorFn: (r) => r.hltb?.mainHours ?? null,
+      cell: ({ row }) =>
+        hltbCell(row.original.hltb?.mainHours ?? null, hltbLoading, row.original.hltb !== null),
+      sortUndefined: 'last',
+    },
+    {
+      id: 'hltbMainExtra',
+      header: 'HLTB +Extra',
+      accessorFn: (r) => r.hltb?.mainExtraHours ?? null,
+      cell: ({ row }) =>
+        hltbCell(row.original.hltb?.mainExtraHours ?? null, hltbLoading, row.original.hltb !== null),
+      sortUndefined: 'last',
+    },
+    {
+      id: 'hltbCompletionist',
+      header: 'HLTB 100%',
+      accessorFn: (r) => r.hltb?.completionistHours ?? null,
+      cell: ({ row }) =>
+        hltbCell(row.original.hltb?.completionistHours ?? null, hltbLoading, row.original.hltb !== null),
+      sortUndefined: 'last',
+    },
+  ]
+}
 
-export function LibraryTable({ rows }: { rows: GameRow[] }) {
+export function LibraryTable({
+  rows,
+  hltbLoading,
+}: {
+  rows: GameRow[]
+  hltbLoading: boolean
+}) {
   const [sorting, setSorting] = useState<SortingState>([{ id: 'name', desc: false }])
+  const columns = useMemo(() => buildColumns(hltbLoading), [hltbLoading])
   const table = useReactTable({
     data: rows,
     columns,
@@ -2420,7 +2440,7 @@ export function LibraryScreen() {
           {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
         </div>
       ) : (
-        <LibraryTable rows={visible} />
+        <LibraryTable rows={visible} hltbLoading={hltb.isFetching} />
       )}
     </main>
   )
