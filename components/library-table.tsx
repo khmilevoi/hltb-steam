@@ -153,6 +153,7 @@ export function LibraryTable({
   const columns = useMemo(() => buildColumns(hltbLoading), [hltbLoading])
   const table = useReactTable({
     data: rows,
+    getRowId: (row) => row.appid.toString(),
     columns,
     state: { sorting },
     onSortingChange: onSortingChange ?? setInternalSorting,
