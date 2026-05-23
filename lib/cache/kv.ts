@@ -16,7 +16,7 @@ function libraryKey(steamId: string) {
 }
 
 function hltbKey(name: string) {
-  return `hltb:${normalizeName(name)}`
+  return `hltb:v2:${normalizeName(name)}`
 }
 
 function isExpired(cachedAt: string, ttlMs: number): boolean {

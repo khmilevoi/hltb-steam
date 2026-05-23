@@ -27,6 +27,11 @@ describe('HltbCell', () => {
     expect(screen.getByText('42h')).toBeTruthy()
   })
 
+  it('renders sub-hour values in minutes', () => {
+    renderHltbCell({ value: 0.25, isLoading: false, rowHasHltb: true })
+    expect(screen.getByText('15m')).toBeTruthy()
+  })
+
   it('still renders the value when loading but the row already has HLTB data', () => {
     renderHltbCell({ value: 12, isLoading: true, rowHasHltb: true })
     expect(screen.getByText('12h')).toBeTruthy()

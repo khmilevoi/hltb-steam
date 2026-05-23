@@ -25,7 +25,7 @@ function toCandidate(result: RawHltbResult): HltbCandidate {
     typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null
   const secondsToHours = (value: unknown) => {
     const seconds = num(value)
-    return seconds === null ? null : Math.round(seconds / 3600)
+    return seconds === null ? null : Math.round(seconds / 60) / 60
   }
 
   return {

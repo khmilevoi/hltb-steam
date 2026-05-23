@@ -72,12 +72,12 @@ describe('local cache (unstorage fs)', () => {
   it('getHltb/setHltb use normalized name in key', async () => {
     getItemMock.mockResolvedValueOnce(null)
     expect(await getHltb('Witcher 3')).toBeNull()
-    expect(getItemMock).toHaveBeenCalledWith('hltb:witcher 3')
+    expect(getItemMock).toHaveBeenCalledWith('hltb:v2:witcher 3')
 
     setItemMock.mockResolvedValueOnce(undefined)
     await setHltb('Witcher 3', null)
     expect(setItemMock).toHaveBeenCalledWith(
-      'hltb:witcher 3',
+      'hltb:v2:witcher 3',
       expect.objectContaining({ value: null }),
     )
   })

@@ -70,6 +70,31 @@ describe('searchByName (hltb client)', () => {
     })
   })
 
+  it('preserves sub-hour durations with minute precision', async () => {
+    fetchMock
+      .mockResolvedValueOnce(Response.json({ token: 'token-1' }))
+      .mockResolvedValueOnce(
+        Response.json({
+          data: [
+            {
+              game_id: 10,
+              game_name: 'Buckshot Roulette',
+              comp_main: 15 * 60,
+              comp_plus: 2 * 3600,
+              comp_100: 10 * 3600,
+            },
+          ],
+        }),
+      )
+
+    const result = await searchByName('Buckshot Roulette')
+
+    expect(result).not.toBeNull()
+    expect(result).not.toBeInstanceOf(Error)
+    if (result === null || result instanceof Error) return
+    expect(result.mainHours).toBe(0.25)
+  })
+
   it('returns null when no candidates', async () => {
     fetchMock
       .mockResolvedValueOnce(Response.json({ token: 'token-1' }))

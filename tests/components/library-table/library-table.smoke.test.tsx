@@ -7,4 +7,9 @@ describe('LibraryTable smoke', () => {
     render(<LibraryTable rows={[]} hltbLoading={false} />)
     expect(screen.getByRole('grid')).toBeTruthy()
   })
+
+  it('renders a centered empty state outside the grid cells', () => {
+    render(<LibraryTable rows={[]} hltbLoading={false} />)
+    expect(screen.getByRole('status').textContent).toContain('No games match')
+  })
 })
