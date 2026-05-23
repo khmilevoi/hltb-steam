@@ -17,6 +17,7 @@ build/
 # Testing / coverage
 coverage/
 .vitest/
+tsconfig.tsbuildinfo
 
 # IDE
 .vscode/
