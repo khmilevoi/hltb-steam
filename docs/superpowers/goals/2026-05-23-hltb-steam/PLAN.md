@@ -14,12 +14,12 @@ Follow `docs/superpowers/plans/2026-05-23-hltb-steam.md` task-by-task, using foc
 - [x] Phase 1: Scaffold Next.js, dependencies, Vitest, and shadcn/ui.
 - [x] Phase 2: Implement domain logic and tested server-side adapters.
 - [x] Phase 3: Implement auth, API routes, client hooks, and providers.
-- [ ] Phase 4: Implement UI screens, table, filters, refresh controls, and error states.
-- [ ] Phase 5: Write README and run final verification.
+- [x] Phase 4: Implement UI screens, table, filters, refresh controls, and error states.
+- [x] Phase 5: Write README and run final verification.
 
 ## Current Phase
 
-Phase 4: UI screens, table, filters, refresh controls, and error states.
+Complete: automated verification passed; full interactive Steam login smoke remains user-run.
 
 ## Open Decisions
 
