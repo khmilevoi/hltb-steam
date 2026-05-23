@@ -116,7 +116,7 @@ hltb-steam/
 │   │   ├── client.ts              # обёртка над howlongtobeat
 │   │   └── matcher.ts             # нормализация имени, выбор лучшего совпадения
 │   ├── cache/
-│   │   └── kv.ts                  # Upstash клиент + getLibrary/setLibrary/getHltb/setHltb
+│   │   └── kv.ts                  # unstorage fs-driver + getLibrary/setLibrary/getHltb/setHltb
 │   └── library/
 │       ├── merge.ts               # Steam game + HLTB → GameRow
 │       └── filters.ts             # pure: searchByName, sortBy, filterByHltbRange
@@ -146,7 +146,7 @@ hltb-steam/
 | `lib/library/merge.ts` | `(SteamGame[], Record<appid, HltbEntry \| null>) → GameRow[]` | — |
 | `lib/steam/client.ts` | `getOwnedGames(steamId)`, возвращает tagged errors как значения | `STEAM_API_KEY` |
 | `lib/hltb/client.ts` | `searchByName(name)`, возвращает tagged errors как значения | `howlongtobeat` |
-| `lib/cache/kv.ts` | `get/setLibrary`, `get/setHltb` поверх Upstash | Upstash creds |
+| `lib/cache/kv.ts` | `get/setLibrary`, `get/setHltb` поверх `unstorage` fs-driver, TTL на чтении через `cachedAt` | — (локальная FS) |
 
 Чистые функции тестируются без моков. Внешние клиенты тестируются с моками fetch / npm-пакета. Route handlers — композиция, отдельных тестов не требует.
 
@@ -299,7 +299,7 @@ export class HltbFetchError extends errore.createTaggedError({
 
 export class KvError extends errore.createTaggedError({
   name: 'KvError',
-  message: 'Upstash KV $op failed for key $key',
+  message: 'Cache $op failed for key $key',
 }) {}
 
 export class UnauthenticatedError extends errore.createTaggedError({
@@ -487,7 +487,7 @@ UI получает `error` от хука и через `errore.matchErrorPartia
 
 - Route handlers — покрыты тестами `lib/*` + ручная проверка локально.
 - React-компоненты — логика вытащена в `lib/library/filters.ts`.
-- NextAuth flow, Upstash клиент сам по себе.
+- NextAuth flow, unstorage сам по себе.
 
 **Конвенция:** проверяем `instanceof TaggedError` и типизированные properties, не `_tag`-строкой.
 

@@ -24,10 +24,10 @@ Architecture constraints:
 - Use Next.js 16 App Router with TypeScript.
 - Auth must use Auth.js v5 with Steam OpenID through `next-auth-steam`.
 - Steam and HLTB calls must run through Next.js Route Handlers, not directly from the browser.
-- Cache Steam library responses in Upstash Redis for 1 hour under `library:{steamId}`.
-- Cache HLTB results, including negative `null` results, in Upstash Redis for 7 days under `hltb:{normalizedName}`.
+- Cache Steam library responses via `unstorage` fs-driver under `library:{steamId}` with effective TTL 1 hour (enforced on read via `cachedAt`).
+- Cache HLTB results, including negative `null` results, via `unstorage` fs-driver under `hltb:{normalizedName}` with effective TTL 7 days.
 - Use TanStack Query v5 for client server-state and localStorage persistence.
-- Use shadcn/ui, Tailwind CSS, TanStack Table v8, sonner, `howlongtobeat`, `p-limit`, `date-fns`, `string-similarity`, `errore`, Vitest, and pnpm as specified.
+- Use `unstorage` (fs-driver), shadcn/ui, Tailwind CSS, TanStack Table v8, sonner, `howlongtobeat`, `p-limit`, `date-fns`, `string-similarity`, `errore`, Vitest, and pnpm as specified.
 - All non-TanStack-Query app code should follow the errore errors-as-values convention. TanStack Query fetch helpers may throw typed boundary errors because the library expects thrown errors for `isError`.
 
 Scope boundaries:
@@ -39,7 +39,7 @@ Scope boundaries:
 - Do not store secret values in the repo. Only create `.env.local.example`.
 
 Risk boundaries:
-- Missing real Steam, NextAuth, or Upstash credentials may block only the manual smoke check, not automated completion.
+- Missing real Steam or NextAuth credentials may block only the manual smoke check, not automated completion. The cache is local (`.cache/`) and requires no credentials.
 - If an upstream package API differs from the planned code, adapt conservatively while preserving the spec behavior and record the adjustment in `ATTEMPTS.md`.
 - If a generated scaffold differs from the plan because current package versions changed, preserve the intended behavior and document the delta.
 </constraints>
@@ -108,7 +108,7 @@ Proxy validity:
 - Focused unit tests are representative for pure transforms and external boundary wrappers.
 - Type-check is representative for route, hook, provider, and component integration.
 - Production build is representative for Next.js wiring, imports, server/client boundaries, and env validation behavior.
-- Manual smoke is the only representative check for the full Steam OpenID and real Upstash/Steam/HLTB integration path.
+- Manual smoke is the only representative check for the full Steam OpenID and real Steam/HLTB integration path.
 
 Slower escalation:
 - If a focused test passes but behavior is questionable, run the whole test suite.
@@ -197,7 +197,7 @@ Manual verification when credentials are available:
 
 Fallback when checks cannot run:
 - If a command fails because dependencies are missing or network access is blocked, install or request the needed access according to the runtime rules, then rerun the command.
-- If real Steam/NextAuth/Upstash credentials are unavailable, skip only the manual smoke path and report that limitation explicitly.
+- If real Steam or NextAuth credentials are unavailable, skip only the manual smoke path and report that limitation explicitly.
 - Do not mark the goal complete with failing automated checks.
 </verification_loop>
 

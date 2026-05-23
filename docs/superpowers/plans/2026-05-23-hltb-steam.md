@@ -4,7 +4,7 @@
 
 **Goal:** Build a Next.js 16 app that signs the user in through Steam OpenID, fetches their library, enriches it with HowLongToBeat times, and lets them search/sort/filter games.
 
-**Architecture:** Client-rendered library page (Client Component) backed by Next.js Route Handlers that call Steam Web API and the `howlongtobeat` npm package. Both upstream responses are cached in Upstash Redis (TTL 1h for library, 7d for HLTB) with manual refresh buttons that pass `force=1`. TanStack Query manages client-side cache with localStorage persistence. All non-TanStack-Query code follows the **errore** errors-as-values convention.
+**Architecture:** Client-rendered library page (Client Component) backed by Next.js Route Handlers that call Steam Web API and the `howlongtobeat` npm package. Both upstream responses are cached locally via `unstorage` fs-driver in `.cache/` (effective TTL 1h for library, 7d for HLTB, enforced on read via `cachedAt`), with manual refresh buttons that pass `force=1`. TanStack Query manages client-side cache with localStorage persistence. All non-TanStack-Query code follows the **errore** errors-as-values convention.
 
 **Tech Stack:** Next.js 16 (App Router), TypeScript, Auth.js v5 + `next-auth-steam`, `unstorage` with fs-driver (local file cache in `.cache/`), TanStack Query v5 + `@tanstack/query-sync-storage-persister`, shadcn/ui + Tailwind CSS, TanStack Table v8, sonner, `howlongtobeat`, `p-limit`, `date-fns`, `string-similarity`, `errore`, Vitest, pnpm.
 
@@ -367,7 +367,7 @@ export class HltbFetchError extends errore.createTaggedError({
 
 export class KvError extends errore.createTaggedError({
   name: 'KvError',
-  message: 'Upstash KV $op failed for key $key',
+  message: 'Cache $op failed for key $key',
 }) {}
 
 export class UnauthenticatedError extends errore.createTaggedError({
