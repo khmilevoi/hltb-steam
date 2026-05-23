@@ -35,7 +35,7 @@ function compare(
   const cmp =
     typeof va === 'string' && typeof vb === 'string'
       ? va.localeCompare(vb)
-      : (va as number) - (vb as number)
+      : Number(va) - Number(vb)
   return direction === 'DESC' ? -cmp : cmp
 }
 

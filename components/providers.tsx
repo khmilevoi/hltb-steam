@@ -25,6 +25,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     useState<ReturnType<typeof createSyncStoragePersister> | null>(null)
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- persistence must initialize after hydration because it needs window.localStorage.
     setPersister(createSyncStoragePersister({ storage: window.localStorage }))
   }, [])
 

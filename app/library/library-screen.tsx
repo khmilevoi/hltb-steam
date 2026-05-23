@@ -45,6 +45,18 @@ function parseStoredFilters(value: string | null): LibraryFiltersValue | null {
   }
 }
 
+function readStoredFilters(): LibraryFiltersValue {
+  if (typeof window === 'undefined') return DEFAULT_LIBRARY_FILTERS
+  try {
+    return (
+      parseStoredFilters(window.localStorage.getItem(LIBRARY_FILTERS_STORAGE_KEY)) ??
+      DEFAULT_LIBRARY_FILTERS
+    )
+  } catch {
+    return DEFAULT_LIBRARY_FILTERS
+  }
+}
+
 export function LibraryScreen() {
   const queryClient = useQueryClient()
   const library = useLibrary()
@@ -64,8 +76,7 @@ export function LibraryScreen() {
     return max
   }, [rows])
 
-  const [filters, setFilters] = useState<LibraryFiltersValue>(DEFAULT_LIBRARY_FILTERS)
-  const [filtersLoaded, setFiltersLoaded] = useState(false)
+  const [filters, setFilters] = useState<LibraryFiltersValue>(readStoredFilters)
 
   const visibleRows = useMemo(() => {
     const searched = searchByName(rows, filters.query)
@@ -84,24 +95,11 @@ export function LibraryScreen() {
 
   useEffect(() => {
     try {
-      const storedFilters = parseStoredFilters(
-        window.localStorage.getItem(LIBRARY_FILTERS_STORAGE_KEY),
-      )
-      if (storedFilters) setFilters(storedFilters)
-    } catch {
-      // localStorage can be unavailable in restricted browser contexts.
-    }
-    setFiltersLoaded(true)
-  }, [])
-
-  useEffect(() => {
-    if (!filtersLoaded) return
-    try {
       window.localStorage.setItem(LIBRARY_FILTERS_STORAGE_KEY, JSON.stringify(filters))
     } catch {
       // Filtering should keep working even when persistence is unavailable.
     }
-  }, [filters, filtersLoaded])
+  }, [filters])
 
   useEffect(() => {
     if (hltb.isError && hltb.error) {

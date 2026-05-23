@@ -29,7 +29,7 @@ function readStored(): LibrarySortColumn[] {
     return DEFAULT_SORT_COLUMNS
   }
   const result = sortColumnsSchema.safeParse(parsed)
-  return result.success ? (result.data as LibrarySortColumn[]) : DEFAULT_SORT_COLUMNS
+  return result.success ? (result.data) : DEFAULT_SORT_COLUMNS
 }
 
 export function usePersistedSortColumns(): readonly [
