@@ -3,3 +3,11 @@
 process.env.STEAM_API_KEY = process.env.STEAM_API_KEY ?? 'test_key'
 process.env.NEXTAUTH_SECRET = process.env.NEXTAUTH_SECRET ?? 'test_secret'
 process.env.NEXTAUTH_URL = process.env.NEXTAUTH_URL ?? 'http://localhost:3000'
+
+class ResizeObserverMock {
+  observe(): void {}
+  unobserve(): void {}
+  disconnect(): void {}
+}
+
+globalThis.ResizeObserver = ResizeObserverMock as unknown as typeof ResizeObserver
