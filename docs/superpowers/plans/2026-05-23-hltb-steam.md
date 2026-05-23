@@ -142,8 +142,9 @@ export default defineConfig({
 - [ ] **Step 2: Create `tests/setup.ts`**
 
 ```ts
-import '@testing-library/dom'
-// Placeholder for future global setup (cleanup, env mocks).
+// Placeholder for global test setup. Task 10 will add env-var
+// fixtures here so that lib/env.ts parses cleanly during tests.
+export {}
 ```
 
 - [ ] **Step 3: Add scripts to `package.json`**
@@ -892,8 +893,8 @@ For tests, env validation runs against `process.env`. We set placeholders in `te
 
 ```ts
 // tests/setup.ts
-import '@testing-library/dom'
-
+// Provide placeholder env vars so lib/env.ts parses cleanly during tests.
+// Real values come from .env.local in dev; tests never hit real Steam.
 process.env.STEAM_API_KEY = process.env.STEAM_API_KEY ?? 'test_key'
 process.env.NEXTAUTH_SECRET = process.env.NEXTAUTH_SECRET ?? 'test_secret'
 process.env.NEXTAUTH_URL = process.env.NEXTAUTH_URL ?? 'http://localhost:3000'
@@ -1052,7 +1053,8 @@ git commit -m "feat(steam): GetOwnedGames adapter with tagged errors"
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { HltbRateLimitError, HltbFetchError } from '@/lib/errors'
 
-const searchMock = vi.fn()
+// vi.hoisted lifts the mock above the hoisted vi.mock() factory.
+const { searchMock } = vi.hoisted(() => ({ searchMock: vi.fn() }))
 
 vi.mock('howlongtobeat', () => {
   return {
@@ -1200,9 +1202,13 @@ Append to existing `.gitignore`:
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { KvError } from '@/lib/errors'
 
-const getItemMock = vi.fn()
-const setItemMock = vi.fn()
-const removeItemMock = vi.fn()
+// vi.hoisted lifts these vi.fn() instances above the hoisted vi.mock() calls
+// so the mock factory can reference them safely.
+const { getItemMock, setItemMock, removeItemMock } = vi.hoisted(() => ({
+  getItemMock: vi.fn(),
+  setItemMock: vi.fn(),
+  removeItemMock: vi.fn(),
+}))
 
 vi.mock('unstorage', () => ({
   createStorage: () => ({
