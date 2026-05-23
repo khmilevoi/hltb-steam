@@ -294,7 +294,7 @@ describe('tagged errors', () => {
 
   it('HltbFetchError carries name and reason', () => {
     const e = new HltbFetchError({ name: 'Dishonored', reason: 'search threw' })
-    expect(e.name_).toBeUndefined()
+    expect(e._tag).toBe('HltbFetchError')
     expect(e.message).toContain('Dishonored')
     expect(e.message).toContain('search threw')
   })
