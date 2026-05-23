@@ -9,3 +9,5 @@
 - 2026-05-23: `next-auth-steam@0.4.0` installed as planned but reports peer warnings for Next 16 and Auth.js v5. Keep the dependency for now and validate the provider wiring in Task 13.
 - 2026-05-23: Current shadcn CLI no longer supports `--base-color`; project was initialized with Radix base and `nova` preset. Components use the current shadcn source format.
 - 2026-05-23: `errore@0.14.1` reserves `$name` in tagged-error message templates. `HltbFetchError` keeps the planned public constructor shape but uses `$gameName` internally for interpolation.
+- 2026-05-23: `next-auth-steam@0.4.0` needs wrapping for Auth.js v5: add `token.url` and `userinfo.url` metadata around its custom request handlers. It also requires `process.env.NEXTAUTH_URL` during provider construction, so `auth.ts` supplies a local fallback.
+- 2026-05-23: Do not import the Steam Auth.js config from Next middleware/proxy. `next-auth-steam` imports `node:crypto`, which is not supported by the Edge runtime. `/library` is protected by its server page `auth()` gate and API routes call `auth()` directly.
