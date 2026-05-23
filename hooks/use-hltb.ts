@@ -1,6 +1,7 @@
 'use client'
 
 import { useQuery, type QueryClient } from '@tanstack/react-query'
+import { useMemo } from 'react'
 import { fetchHltb } from '@/lib/client-fetch'
 import type { SteamGame } from '@/types/game'
 
@@ -10,7 +11,7 @@ export function hltbQueryKey(appids: number[]) {
 
 export function useHltb({ games }: { games: SteamGame[] | undefined }) {
   const enabled = games !== undefined && games.length > 0
-  const appids = games?.map((game) => game.appid) ?? []
+  const appids = useMemo(() => games?.map((game) => game.appid) ?? [], [games])
   return useQuery({
     enabled,
     queryKey: hltbQueryKey(appids),
