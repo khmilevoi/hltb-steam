@@ -6,10 +6,10 @@ import {
   getSortedRowModel,
   useReactTable,
   type ColumnDef,
+  type OnChangeFn,
   type SortingState,
 } from '@tanstack/react-table'
 import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react'
-import Image from 'next/image'
 import { useMemo, useState } from 'react'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -22,6 +22,8 @@ import {
 } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import type { GameRow } from '@/types/game'
+
+const GAME_PLACEHOLDER_IMAGE = '/game-placeholder.svg'
 
 function hours(minutes: number) {
   return (minutes / 60).toFixed(1)
@@ -56,21 +58,29 @@ function SortIcon({ state }: { state: false | 'asc' | 'desc' }) {
   return <ArrowUpDown aria-hidden="true" className="ml-1 inline opacity-40" />
 }
 
+function GameCoverImage({ src, name }: { src: string; name: string }) {
+  const [imageSrc, setImageSrc] = useState(src || GAME_PLACEHOLDER_IMAGE)
+
+  return (
+    <img
+      src={imageSrc}
+      alt={name}
+      width={92}
+      height={43}
+      className="h-[43px] w-[92px] rounded object-cover"
+      onError={() => {
+        if (imageSrc !== GAME_PLACEHOLDER_IMAGE) setImageSrc(GAME_PLACEHOLDER_IMAGE)
+      }}
+    />
+  )
+}
+
 function buildColumns(hltbLoading: boolean): ColumnDef<GameRow>[] {
   return [
     {
       id: 'cover',
       header: '',
-      cell: ({ row }) => (
-        <Image
-          src={row.original.headerImageUrl}
-          alt={row.original.name}
-          width={92}
-          height={43}
-          className="rounded"
-          unoptimized
-        />
-      ),
+      cell: ({ row }) => <GameCoverImage src={row.original.headerImageUrl} name={row.original.name} />,
       enableSorting: false,
     },
     {
@@ -127,14 +137,25 @@ function buildColumns(hltbLoading: boolean): ColumnDef<GameRow>[] {
   ]
 }
 
-export function LibraryTable({ rows, hltbLoading }: { rows: GameRow[]; hltbLoading: boolean }) {
-  const [sorting, setSorting] = useState<SortingState>([{ id: 'name', desc: false }])
+export function LibraryTable({
+  rows,
+  hltbLoading,
+  sorting: controlledSorting,
+  onSortingChange,
+}: {
+  rows: GameRow[]
+  hltbLoading: boolean
+  sorting?: SortingState
+  onSortingChange?: OnChangeFn<SortingState>
+}) {
+  const [internalSorting, setInternalSorting] = useState<SortingState>([{ id: 'name', desc: false }])
+  const sorting = controlledSorting ?? internalSorting
   const columns = useMemo(() => buildColumns(hltbLoading), [hltbLoading])
   const table = useReactTable({
     data: rows,
     columns,
     state: { sorting },
-    onSortingChange: setSorting,
+    onSortingChange: onSortingChange ?? setInternalSorting,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
   })

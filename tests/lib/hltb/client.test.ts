@@ -11,58 +11,110 @@ vi.mock('howlongtobeat', () => {
   }
 })
 
+const fetchMock = vi.fn<typeof fetch>()
+
 beforeEach(() => {
   searchMock.mockReset()
+  searchMock.mockRejectedValue(new Error('Request failed with status code 404'))
+  fetchMock.mockReset()
+  vi.stubGlobal('fetch', fetchMock)
 })
 
 import { searchByName } from '@/lib/hltb/client'
 
 describe('searchByName (hltb client)', () => {
   it('returns a matched entry', async () => {
-    searchMock.mockResolvedValueOnce([
-      {
-        id: '10',
-        name: 'The Witcher 3: Wild Hunt',
-        gameplayMain: 52,
-        gameplayMainExtra: 105,
-        gameplayCompletionist: 180,
-      },
-    ])
+    searchMock.mockRejectedValueOnce(new Error('Request failed with status code 404'))
+    fetchMock
+      .mockResolvedValueOnce(
+        Response.json({
+          token: 'token-1',
+          hpKey: 'ign_test',
+          hpVal: 'hp-value',
+        }),
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          data: [
+            {
+              game_id: 10,
+              game_name: 'The Witcher 3: Wild Hunt',
+              comp_main: 52 * 3600,
+              comp_plus: 105 * 3600,
+              comp_100: 180 * 3600,
+            },
+          ],
+        }),
+      )
+
     const result = await searchByName('Witcher 3')
+
     expect(result).not.toBeNull()
+    expect(result).not.toBeInstanceOf(Error)
     if (result === null || result instanceof Error) return
     expect(result.hltbId).toBe(10)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock.mock.calls[0]?.[0]).toMatch('/api/bleed/init')
+    expect(fetchMock.mock.calls[1]?.[0]).toBe('https://howlongtobeat.com/api/bleed')
+    const request = fetchMock.mock.calls[1]?.[1]
+    expect(request?.headers).toMatchObject({
+      'Content-Type': 'application/json',
+      'x-auth-token': 'token-1',
+      'x-hp-key': 'ign_test',
+      'x-hp-val': 'hp-value',
+    })
+    expect(JSON.parse(String(request?.body))).toMatchObject({
+      searchType: 'games',
+      searchTerms: ['Witcher', '3'],
+      ign_test: 'hp-value',
+    })
   })
 
   it('returns null when no candidates', async () => {
-    searchMock.mockResolvedValueOnce([])
+    fetchMock
+      .mockResolvedValueOnce(Response.json({ token: 'token-1' }))
+      .mockResolvedValueOnce(Response.json({ data: [] }))
+
     const result = await searchByName('Some Obscure Game')
+
     expect(result).toBeNull()
   })
 
   it('returns null when no candidate clears similarity threshold', async () => {
-    searchMock.mockResolvedValueOnce([
-      {
-        id: '1',
-        name: 'Completely Unrelated',
-        gameplayMain: 1,
-        gameplayMainExtra: 2,
-        gameplayCompletionist: 3,
-      },
-    ])
+    fetchMock
+      .mockResolvedValueOnce(Response.json({ token: 'token-1' }))
+      .mockResolvedValueOnce(
+        Response.json({
+          data: [
+            {
+              game_id: 1,
+              game_name: 'Completely Unrelated',
+              comp_main: 3600,
+              comp_plus: 7200,
+              comp_100: 10800,
+            },
+          ],
+        }),
+      )
+
     const result = await searchByName('Witcher 3')
+
     expect(result).toBeNull()
   })
 
-  it('returns HltbRateLimitError on a 429 error message', async () => {
-    searchMock.mockRejectedValueOnce(new Error('HTTP 429 Too Many Requests'))
+  it('returns HltbRateLimitError on a 429 response', async () => {
+    fetchMock.mockResolvedValueOnce(new Response('rate limited', { status: 429 }))
+
     const result = await searchByName('Anything')
+
     expect(result).toBeInstanceOf(HltbRateLimitError)
   })
 
-  it('returns HltbFetchError on other throws', async () => {
-    searchMock.mockRejectedValueOnce(new Error('network down'))
+  it('returns HltbFetchError on other failed responses', async () => {
+    fetchMock.mockResolvedValueOnce(new Response('not found', { status: 404 }))
+
     const result = await searchByName('Anything')
+
     expect(result).toBeInstanceOf(HltbFetchError)
   })
 })

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="460" height="215" viewBox="0 0 460 215" role="img" aria-labelledby="title desc">
+  <title id="title">Game cover placeholder</title>
+  <desc id="desc">A neutral placeholder for games without a cover image.</desc>
+  <rect width="460" height="215" rx="18" fill="#f1f5f9"/>
+  <rect x="1" y="1" width="458" height="213" rx="17" fill="none" stroke="#cbd5e1" stroke-width="2"/>
+  <path d="M188 126h84c17.7 0 32-14.3 32-32s-14.3-32-32-32h-84c-17.7 0-32 14.3-32 32s14.3 32 32 32Z" fill="#e2e8f0" stroke="#94a3b8" stroke-width="8"/>
+  <path d="M193 82v24M181 94h24" stroke="#64748b" stroke-width="10" stroke-linecap="round"/>
+  <circle cx="265" cy="94" r="8" fill="#64748b"/>
+  <circle cx="286" cy="94" r="8" fill="#64748b"/>
+  <text x="230" y="163" text-anchor="middle" fill="#475569" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="700">No image</text>
+</svg>

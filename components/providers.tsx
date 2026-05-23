@@ -1,10 +1,10 @@
 'use client'
 
-import { QueryClient } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
 import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persister'
 import { SessionProvider } from 'next-auth/react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Toaster } from '@/components/ui/sonner'
 
 export function Providers({ children }: { children: React.ReactNode }) {
@@ -21,10 +21,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
       }),
   )
 
-  const persister =
-    typeof window === 'undefined'
-      ? undefined
-      : createSyncStoragePersister({ storage: window.localStorage })
+  const [persister, setPersister] =
+    useState<ReturnType<typeof createSyncStoragePersister> | null>(null)
+
+  useEffect(() => {
+    setPersister(createSyncStoragePersister({ storage: window.localStorage }))
+  }, [])
 
   return (
     <SessionProvider>
@@ -37,10 +39,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
           <Toaster richColors position="top-right" />
         </PersistQueryClientProvider>
       ) : (
-        <>
+        <QueryClientProvider client={client}>
           {children}
           <Toaster richColors position="top-right" />
-        </>
+        </QueryClientProvider>
       )}
     </SessionProvider>
   )
