@@ -12,14 +12,14 @@ Follow `docs/superpowers/plans/2026-05-23-hltb-steam.md` task-by-task, using foc
 
 - [x] Phase 0: Inspect spec, plan, goal contract, control surface, and repo state.
 - [x] Phase 1: Scaffold Next.js, dependencies, Vitest, and shadcn/ui.
-- [ ] Phase 2: Implement domain logic and tested server-side adapters.
+- [x] Phase 2: Implement domain logic and tested server-side adapters.
 - [ ] Phase 3: Implement auth, API routes, client hooks, and providers.
 - [ ] Phase 4: Implement UI screens, table, filters, refresh controls, and error states.
 - [ ] Phase 5: Write README and run final verification.
 
 ## Current Phase
 
-Phase 2: test-first domain logic and server-side adapters.
+Phase 3: Auth.js, route handlers, TanStack Query providers, and data hooks.
 
 ## Open Decisions
 
