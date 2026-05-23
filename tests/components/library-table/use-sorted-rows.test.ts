@@ -3,13 +3,14 @@ import { sortRows } from '@/components/library-table/use-sorted-rows'
 import type { GameRow } from '@/types/game'
 
 function game(overrides: Partial<GameRow> & { name: string; appid: number }): GameRow {
+  const { appid, name, ...rest } = overrides
   return {
-    appid: overrides.appid,
-    name: overrides.name,
+    appid,
+    name,
     playtimeMinutes: 0,
     headerImageUrl: '',
     hltb: null,
-    ...overrides,
+    ...rest,
   }
 }
 
