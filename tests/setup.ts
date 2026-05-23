@@ -11,3 +11,8 @@ class ResizeObserverMock {
 }
 
 globalThis.ResizeObserver = ResizeObserverMock as unknown as typeof ResizeObserver
+
+globalThis.CSS = {
+  ...(globalThis.CSS ?? {}),
+  escape: (value: string) => value.replace(/[^a-zA-Z0-9_-]/g, '\\$&'),
+} as typeof CSS
