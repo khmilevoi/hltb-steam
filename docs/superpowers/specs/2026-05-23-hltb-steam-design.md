@@ -36,7 +36,7 @@
 |---|---|---|
 | Framework | Next.js 16 (App Router) | Frontend + API routes в одном проекте, Fluid Compute на Vercel из коробки |
 | Auth | Auth.js v5 + `next-auth-steam` (Steam OpenID provider) | Стандартный готовый поток, никаких велосипедов |
-| Server cache | Upstash Redis (через Vercel Marketplace) | KV-доступ из Functions, не нужна полноценная БД |
+| Server cache | `unstorage` с fs-driver (файлы в `.cache/`) | Локальный KV без внешних сервисов; единый API с Redis-driver если потом понадобится переезд |
 | Client data | TanStack Query + `@tanstack/query-sync-storage-persister` (localStorage) | Стандарт для серверного состояния, переживает reload |
 | UI | shadcn/ui + Tailwind CSS | Копируемые компоненты на Radix, полный контроль стилей |
 | Table | TanStack Table | Сортировка/фильтрация из коробки, headless |
@@ -64,7 +64,7 @@
 │  └─ /api/hltb                (HLTB scrape)   │
 │                  │                            │
 │                  ▼                            │
-│           Upstash Redis (KV)                  │
+│      unstorage (fs-driver, .cache/)           │
 │    ── library:{steamId}    TTL 1 час          │
 │    ── hltb:{normalizedName} TTL 7 дней        │
 └──────────────────────────────────────────────┘
@@ -77,14 +77,14 @@
 **Поток:**
 
 1. Пользователь жмёт "Sign in through Steam" → NextAuth OpenID flow → возвращается SteamID64, кладётся в JWT-сессию (`session.user.steamId`).
-2. `/library` (Client Component) делает `useQuery(['library'])` → `GET /api/library` → Steam `GetOwnedGames` с server-side ключом → массив `{appid, name, playtimeMinutes, headerImageUrl}`. Ответ кладётся в Upstash KV под ключом `library:{steamId}` с TTL 1 час.
-3. После получения библиотеки клиент делает `useQuery(['hltb', appids])` → `POST /api/hltb` со списком `{appid, name}`. Сервер для каждого имени проверяет `hltb:{normalizedName}` в KV; cache miss → скрейп через `howlongtobeat` (с `p-limit(5)`) → запись в KV (TTL 7 дней). Отрицательный результат (`null`) тоже кешируется.
+2. `/library` (Client Component) делает `useQuery(['library'])` → `GET /api/library` → Steam `GetOwnedGames` с server-side ключом → массив `{appid, name, playtimeMinutes, headerImageUrl}`. Ответ кладётся в `unstorage` под ключом `library:{steamId}` с эффективным TTL 1 час.
+3. После получения библиотеки клиент делает `useQuery(['hltb', appids])` → `POST /api/hltb` со списком `{appid, name}`. Сервер для каждого имени проверяет `hltb:{normalizedName}` в storage; cache miss → скрейп через `howlongtobeat` (с `p-limit(5)`) → запись в storage (эффективный TTL 7 дней). Отрицательный результат (`null`) тоже кешируется.
 4. Клиент мёрджит Steam + HLTB по `appid` в `GameRow[]`, складывает в TanStack Query (`staleTime: 5min`, `gcTime: 24h`, `refetchOnWindowFocus: false`) + persistor в `localStorage`.
 5. Поиск/сортировка/фильтр — `useMemo` над `GameRow[]`, без сетевых запросов.
 
 **Безопасность:**
 
-- `STEAM_API_KEY`, `NEXTAUTH_SECRET`, `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` живут в `.env.local` (и Vercel env vars, если когда-то деплой).
+- `STEAM_API_KEY`, `NEXTAUTH_SECRET` живут в `.env.local`. Кеш — локальная директория `.cache/` (в `.gitignore`).
 - `/api/library` и `/api/hltb` требуют валидную сессию NextAuth.
 - Никаких клиентских вызовов к Steam/HLTB — всё через свой бэкенд.
 
@@ -231,7 +231,7 @@ export type Cached<T> = { value: T; cachedAt: string }  // ISO timestamp
 
 ## 8. Caching Strategy
 
-### Серверный кеш (Upstash Redis)
+### Серверный кеш (`unstorage` с fs-driver)
 
 | Ключ | Значение | TTL | Скоуп |
 |---|---|---|---|
@@ -239,6 +239,8 @@ export type Cached<T> = { value: T; cachedAt: string }  // ISO timestamp
 | `hltb:{normalizedName}` | `Cached<HltbEntry \| null>` | 7 дней | Global |
 
 `null` для HLTB тоже кешируется — отрицательный кеш предотвращает повторный скрейпинг ненайденных игр.
+
+**TTL** реализуется на нашей стороне: fs-driver не уважает `setItem` ttl-опцию. Мы храним `cachedAt: string` внутри payload и при чтении проверяем `(Date.now() - new Date(cachedAt).getTime()) < ttlMs`; если истёк — возвращаем `null` (cache miss). Старые файлы остаются на диске до перезаписи — приемлемо для локального dev.
 
 ### Клиентский кеш (TanStack Query)
 
@@ -457,14 +459,14 @@ UI получает `error` от хука и через `errore.matchErrorPartia
 | HLTB упал на одной игре | `entries[appid] = null` | Колонка показывает `—`, на hover tooltip "HLTB data unavailable" |
 | HLTB не нашёл игру | matcher вернул `null` (кешировано) | То же `—` |
 | HLTB rate limit | `HltbRateLimitError` в одном из батчей | Прерываем батч, отдаём что успели; клиент через 10 сек может ретрайнуть |
-| Upstash KV недоступен | `KvError` | Логируем (`console.warn`, rule 21), работаем без кеша. Не падаем. |
+| Файловый кеш недоступен (нет прав, диск переполнен) | `KvError` | Логируем (`console.warn`, rule 21), работаем без кеша. Не падаем. |
 | Сеть пропала | TanStack Query `onError` | sonner toast, последние данные остаются на экране |
 
 **Принципы:**
 
 1. **Graceful degradation для HLTB** — `Promise.all` над уже-typed-результатами + `null` в ответе. Одна игра не валит экран.
 2. **`errore.matchError`** с обязательным `Error`-fallback мапит tagged errors в HTTP-коды.
-3. **KV-ошибки не пропагируются** — логируются и работа продолжается. Падение Upstash не валит запрос.
+3. **Cache-ошибки не пропагируются** — логируются и работа продолжается. Сбой файлового кеша не валит запрос.
 4. **Никаких `try/catch` в route handlers** — все `.catch()` живут только в `lib/*` на границе с fetch/npm.
 5. **`controller.abort()`** (если будет использоваться для таймаутов) — только с tagged errors, extending `errore.AbortError`.
 6. **`tsconfig.json` lib** включает `"ESNext.Disposable"` для `await using` (на случай если понадобится).
@@ -520,17 +522,14 @@ STEAM_API_KEY=
 # NextAuth
 NEXTAUTH_URL=http://localhost:3000
 NEXTAUTH_SECRET=
-
-# Upstash Redis
-UPSTASH_REDIS_REST_URL=
-UPSTASH_REDIS_REST_TOKEN=
 ```
 
 Получение:
 
 - `STEAM_API_KEY` — https://steamcommunity.com/dev/apikey
 - `NEXTAUTH_SECRET` — `openssl rand -base64 32`
-- `UPSTASH_REDIS_REST_*` — Upstash Console (или Vercel Marketplace → Upstash → Connect)
+
+Кеш живёт в `.cache/` рядом с проектом (создаётся автоматически, в `.gitignore`). Удалить кеш — удалить директорию.
 
 ## 12. Open Questions
 

@@ -6,7 +6,7 @@
 
 **Architecture:** Client-rendered library page (Client Component) backed by Next.js Route Handlers that call Steam Web API and the `howlongtobeat` npm package. Both upstream responses are cached in Upstash Redis (TTL 1h for library, 7d for HLTB) with manual refresh buttons that pass `force=1`. TanStack Query manages client-side cache with localStorage persistence. All non-TanStack-Query code follows the **errore** errors-as-values convention.
 
-**Tech Stack:** Next.js 16 (App Router), TypeScript, Auth.js v5 + `next-auth-steam`, Upstash Redis REST, TanStack Query v5 + `@tanstack/query-sync-storage-persister`, shadcn/ui + Tailwind CSS, TanStack Table v8, sonner, `howlongtobeat`, `p-limit`, `date-fns`, `string-similarity`, `errore`, Vitest, pnpm.
+**Tech Stack:** Next.js 16 (App Router), TypeScript, Auth.js v5 + `next-auth-steam`, `unstorage` with fs-driver (local file cache in `.cache/`), TanStack Query v5 + `@tanstack/query-sync-storage-persister`, shadcn/ui + Tailwind CSS, TanStack Table v8, sonner, `howlongtobeat`, `p-limit`, `date-fns`, `string-similarity`, `errore`, Vitest, pnpm.
 
 **Reference spec:** `docs/superpowers/specs/2026-05-23-hltb-steam-design.md`
 
@@ -59,11 +59,9 @@ STEAM_API_KEY=
 # NextAuth — generate with: openssl rand -base64 32
 NEXTAUTH_URL=http://localhost:3000
 NEXTAUTH_SECRET=
-
-# Upstash Redis — from Upstash console or `vercel env pull`
-UPSTASH_REDIS_REST_URL=
-UPSTASH_REDIS_REST_TOKEN=
 ```
+
+Cache lives in `./.cache/` and is created automatically — no env vars needed for storage.
 
 - [ ] **Step 4: Verify scaffold compiles**
 
@@ -91,7 +89,7 @@ git commit -m "chore: scaffold Next.js 16 + TypeScript + Tailwind"
 - [ ] **Step 1: Install all runtime deps in one command**
 
 ```bash
-pnpm add errore next-auth@beta next-auth-steam @upstash/redis @tanstack/react-query @tanstack/react-query-persist-client @tanstack/query-sync-storage-persister @tanstack/react-table howlongtobeat p-limit date-fns string-similarity sonner zod
+pnpm add errore next-auth@beta next-auth-steam unstorage @tanstack/react-query @tanstack/react-query-persist-client @tanstack/query-sync-storage-persister @tanstack/react-table howlongtobeat p-limit date-fns string-similarity sonner zod
 ```
 
 - [ ] **Step 2: Install dev deps**
@@ -884,8 +882,6 @@ const schema = z.object({
   STEAM_API_KEY: z.string().min(1),
   NEXTAUTH_SECRET: z.string().min(1),
   NEXTAUTH_URL: z.string().url(),
-  UPSTASH_REDIS_REST_URL: z.string().url(),
-  UPSTASH_REDIS_REST_TOKEN: z.string().min(1),
 })
 
 export const env = schema.parse(process.env)
@@ -902,8 +898,6 @@ import '@testing-library/dom'
 process.env.STEAM_API_KEY = process.env.STEAM_API_KEY ?? 'test_key'
 process.env.NEXTAUTH_SECRET = process.env.NEXTAUTH_SECRET ?? 'test_secret'
 process.env.NEXTAUTH_URL = process.env.NEXTAUTH_URL ?? 'http://localhost:3000'
-process.env.UPSTASH_REDIS_REST_URL = process.env.UPSTASH_REDIS_REST_URL ?? 'http://localhost:8079'
-process.env.UPSTASH_REDIS_REST_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN ?? 'test_token'
 ```
 
 - [ ] **Step 3: Write failing tests for Steam client**
@@ -1182,90 +1176,118 @@ git commit -m "feat(hltb): client adapter over howlongtobeat with tagged errors"
 
 ---
 
-## Task 12: Upstash KV cache (`lib/cache/kv.ts`)
+## Task 12: Local filesystem cache (`lib/cache/kv.ts`)
 
 **Files:**
 - Create: `lib/cache/kv.ts`
 - Test: `tests/lib/cache/kv.test.ts`
+- Modify: `.gitignore` (add `.cache/`)
 
-- [ ] **Step 1: Write failing tests**
+We use `unstorage` with the fs-driver — a local file-based KV store. fs-driver does NOT honour `setItem` ttl-options, so we implement TTL ourselves by stamping `cachedAt` into the payload and checking on read. Stale entries are returned as `null` (cache miss) and naturally overwritten on next write.
+
+- [ ] **Step 1: Add `.cache/` to `.gitignore`**
+
+Append to existing `.gitignore`:
+
+```
+# Local file cache (unstorage fs-driver)
+.cache/
+```
+
+- [ ] **Step 2: Write failing tests**
 
 ```ts
 // tests/lib/cache/kv.test.ts
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { KvError } from '@/lib/errors'
 
-const getMock = vi.fn()
-const setMock = vi.fn()
+const getItemMock = vi.fn()
+const setItemMock = vi.fn()
+const removeItemMock = vi.fn()
 
-vi.mock('@upstash/redis', () => {
-  return {
-    Redis: class {
-      get = getMock
-      set = setMock
-    },
-  }
+vi.mock('unstorage', () => ({
+  createStorage: () => ({
+    getItem: getItemMock,
+    setItem: setItemMock,
+    removeItem: removeItemMock,
+  }),
+}))
+vi.mock('unstorage/drivers/fs', () => ({ default: () => ({}) }))
+
+beforeEach(() => {
+  getItemMock.mockReset()
+  setItemMock.mockReset()
+  removeItemMock.mockReset()
 })
-
-beforeEach(() => { getMock.mockReset(); setMock.mockReset() })
 
 import { getLibrary, setLibrary, getHltb, setHltb } from '@/lib/cache/kv'
 
-describe('kv cache', () => {
+describe('local cache (unstorage fs)', () => {
   it('getLibrary returns null on cache miss', async () => {
-    getMock.mockResolvedValueOnce(null)
+    getItemMock.mockResolvedValueOnce(null)
     expect(await getLibrary('xx')).toBeNull()
   })
 
-  it('getLibrary returns Cached payload on hit', async () => {
-    getMock.mockResolvedValueOnce({ value: [], cachedAt: '2026-05-23T00:00:00Z' })
+  it('getLibrary returns Cached payload when fresh', async () => {
+    const fresh = new Date(Date.now() - 60_000).toISOString() // 1 min old
+    getItemMock.mockResolvedValueOnce({ value: [], cachedAt: fresh })
     const result = await getLibrary('xx')
     expect(result).not.toBeNull()
     expect(result).not.toBeInstanceOf(Error)
     if (!result || result instanceof Error) return
-    expect(result.cachedAt).toBe('2026-05-23T00:00:00Z')
+    expect(result.cachedAt).toBe(fresh)
   })
 
-  it('getLibrary returns KvError when redis throws', async () => {
-    getMock.mockRejectedValueOnce(new Error('redis down'))
+  it('getLibrary returns null when entry is older than 1 hour', async () => {
+    const stale = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString() // 2h
+    getItemMock.mockResolvedValueOnce({ value: [], cachedAt: stale })
+    expect(await getLibrary('xx')).toBeNull()
+  })
+
+  it('getLibrary returns KvError when storage throws', async () => {
+    getItemMock.mockRejectedValueOnce(new Error('disk down'))
     const result = await getLibrary('xx')
     expect(result).toBeInstanceOf(KvError)
   })
 
-  it('setLibrary writes with EX 3600', async () => {
-    setMock.mockResolvedValueOnce('OK')
+  it('setLibrary writes a Cached<T> payload under library:xx', async () => {
+    setItemMock.mockResolvedValueOnce(undefined)
     const result = await setLibrary('xx', [])
     expect(result).toBeUndefined()
-    expect(setMock).toHaveBeenCalledWith(
+    expect(setItemMock).toHaveBeenCalledWith(
       'library:xx',
       expect.objectContaining({ value: [], cachedAt: expect.any(String) }),
-      { ex: 3600 },
     )
   })
 
   it('setLibrary returns KvError on throw', async () => {
-    setMock.mockRejectedValueOnce(new Error('boom'))
+    setItemMock.mockRejectedValueOnce(new Error('boom'))
     const result = await setLibrary('xx', [])
     expect(result).toBeInstanceOf(KvError)
   })
 
-  it('getHltb / setHltb use normalized name in key and 7d TTL', async () => {
-    getMock.mockResolvedValueOnce(null)
+  it('getHltb/setHltb use normalized name in key', async () => {
+    getItemMock.mockResolvedValueOnce(null)
     expect(await getHltb('Witcher 3')).toBeNull()
-    expect(getMock).toHaveBeenCalledWith('hltb:witcher 3')
+    expect(getItemMock).toHaveBeenCalledWith('hltb:witcher 3')
 
-    setMock.mockResolvedValueOnce('OK')
+    setItemMock.mockResolvedValueOnce(undefined)
     await setHltb('Witcher 3', null)
-    expect(setMock).toHaveBeenCalledWith(
+    expect(setItemMock).toHaveBeenCalledWith(
       'hltb:witcher 3',
       expect.objectContaining({ value: null }),
-      { ex: 60 * 60 * 24 * 7 },
     )
+  })
+
+  it('getHltb returns null when entry is older than 7 days', async () => {
+    const stale = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString()
+    getItemMock.mockResolvedValueOnce({ value: null, cachedAt: stale })
+    expect(await getHltb('Witcher 3')).toBeNull()
   })
 })
 ```
 
-- [ ] **Step 2: Run to confirm fail**
+- [ ] **Step 3: Run to confirm fail**
 
 ```bash
 rtk pnpm test tests/lib/cache/kv.test.ts
@@ -1273,38 +1295,48 @@ rtk pnpm test tests/lib/cache/kv.test.ts
 
 Expected: module not found.
 
-- [ ] **Step 3: Implement**
+- [ ] **Step 4: Implement**
 
 ```ts
 // lib/cache/kv.ts
-import { Redis } from '@upstash/redis'
-import { env } from '@/lib/env'
+import { createStorage } from 'unstorage'
+import fsDriver from 'unstorage/drivers/fs'
 import { KvError } from '@/lib/errors'
 import { normalizeName } from '@/lib/hltb/matcher'
 import type { Cached, SteamGame, HltbEntry } from '@/types/game'
 
-const redis = new Redis({
-  url: env.UPSTASH_REDIS_REST_URL,
-  token: env.UPSTASH_REDIS_REST_TOKEN,
+const storage = createStorage({
+  driver: fsDriver({ base: './.cache' }),
 })
 
-const LIBRARY_TTL_S = 60 * 60          // 1 hour
-const HLTB_TTL_S    = 60 * 60 * 24 * 7 // 7 days
+const LIBRARY_TTL_MS = 60 * 60 * 1000               // 1 hour
+const HLTB_TTL_MS    = 7 * 24 * 60 * 60 * 1000       // 7 days
 
 function libraryKey(steamId: string) { return `library:${steamId}` }
 function hltbKey(name: string)       { return `hltb:${normalizeName(name)}` }
 
-async function get<T>(key: string): Promise<KvError | Cached<T> | null> {
-  const raw = await redis.get(key).catch(
+function isExpired(cachedAt: string, ttlMs: number): boolean {
+  const age = Date.now() - new Date(cachedAt).getTime()
+  return Number.isNaN(age) || age >= ttlMs
+}
+
+async function get<T>(
+  key: string,
+  ttlMs: number,
+): Promise<KvError | Cached<T> | null> {
+  const raw = await storage.getItem(key).catch(
     (e) => new KvError({ op: 'get', key, cause: e as Error }),
   )
   if (raw instanceof Error) return raw
-  return (raw as Cached<T> | null) ?? null
+  if (raw === null) return null
+  const cached = raw as Cached<T>
+  if (isExpired(cached.cachedAt, ttlMs)) return null
+  return cached
 }
 
-async function setEx<T>(key: string, value: T, ttlSeconds: number): Promise<KvError | void> {
+async function set<T>(key: string, value: T): Promise<KvError | void> {
   const payload: Cached<T> = { value, cachedAt: new Date().toISOString() }
-  const result = await redis.set(key, payload, { ex: ttlSeconds }).catch(
+  const result = await storage.setItem(key, payload).catch(
     (e) => new KvError({ op: 'set', key, cause: e as Error }),
   )
   if (result instanceof Error) return result
@@ -1312,23 +1344,23 @@ async function setEx<T>(key: string, value: T, ttlSeconds: number): Promise<KvEr
 }
 
 export function getLibrary(steamId: string) {
-  return get<SteamGame[]>(libraryKey(steamId))
+  return get<SteamGame[]>(libraryKey(steamId), LIBRARY_TTL_MS)
 }
 
 export function setLibrary(steamId: string, games: SteamGame[]) {
-  return setEx(libraryKey(steamId), games, LIBRARY_TTL_S)
+  return set(libraryKey(steamId), games)
 }
 
 export function getHltb(name: string) {
-  return get<HltbEntry | null>(hltbKey(name))
+  return get<HltbEntry | null>(hltbKey(name), HLTB_TTL_MS)
 }
 
 export function setHltb(name: string, entry: HltbEntry | null) {
-  return setEx(hltbKey(name), entry, HLTB_TTL_S)
+  return set(hltbKey(name), entry)
 }
 ```
 
-- [ ] **Step 4: Run to confirm pass**
+- [ ] **Step 5: Run to confirm pass**
 
 ```bash
 rtk pnpm test tests/lib/cache/kv.test.ts
@@ -1336,11 +1368,11 @@ rtk pnpm test tests/lib/cache/kv.test.ts
 
 Expected: all tests pass.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add lib/cache/kv.ts tests/lib/cache/kv.test.ts
-git commit -m "feat(cache): Upstash Redis adapter for library and hltb"
+git add lib/cache/kv.ts tests/lib/cache/kv.test.ts .gitignore
+git commit -m "feat(cache): unstorage fs-driver with TTL-on-read for library and hltb"
 ```
 
 ---
@@ -2430,7 +2462,7 @@ by playtime estimates.
 
 - Next.js 16 (App Router) + TypeScript
 - Auth.js v5 + Steam OpenID (`next-auth-steam`)
-- Upstash Redis (server-side cache: library 1h, HLTB 7d)
+- `unstorage` with fs-driver — local file cache in `.cache/` (library 1h, HLTB 7d)
 - TanStack Query + Table v8
 - shadcn/ui + Tailwind CSS
 - errore (errors-as-values)
@@ -2441,13 +2473,14 @@ by playtime estimates.
 ```bash
 cp .env.local.example .env.local
 # Fill in:
-#   STEAM_API_KEY               → https://steamcommunity.com/dev/apikey
-#   NEXTAUTH_SECRET             → openssl rand -base64 32
-#   UPSTASH_REDIS_REST_URL/TOKEN → Upstash console or `vercel env pull`
+#   STEAM_API_KEY    → https://steamcommunity.com/dev/apikey
+#   NEXTAUTH_SECRET  → openssl rand -base64 32
 
 pnpm install
 pnpm dev
 ```
+
+To wipe the server-side cache, delete the `.cache/` directory.
 
 Visit http://localhost:3000 and sign in.
 
