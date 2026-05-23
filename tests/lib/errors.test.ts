@@ -61,7 +61,7 @@ describe('tagged errors', () => {
   })
 
   it('matchError routes by _tag', () => {
-    const e: Error = new SteamPrivateProfileError({ steamId: 'x' })
+    const e = new SteamPrivateProfileError({ steamId: 'x' })
     const result = errore.matchError(e, {
       SteamPrivateProfileError: () => 'private',
       Error: () => 'other',
