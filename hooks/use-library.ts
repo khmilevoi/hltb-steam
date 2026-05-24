@@ -16,9 +16,10 @@ export function useLibrary() {
 }
 
 export async function refreshLibrary(queryClient: QueryClient) {
-  await queryClient.fetchQuery({
+  const data = await queryClient.fetchQuery({
     queryKey: LIBRARY_QUERY_KEY,
     queryFn: () => fetchLibrary({ force: true }),
     staleTime: 0,
   })
+  return data.games
 }

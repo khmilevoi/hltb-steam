@@ -60,11 +60,11 @@ function readStoredFilters(): LibraryFiltersValue {
 export function LibraryScreen() {
   const queryClient = useQueryClient()
   const library = useLibrary()
-  const hltb = useHltb({ games: library.data?.games })
+  const hltb = useHltb({ enabled: library.data !== undefined })
 
   const rows = useMemo(() => {
     if (!library.data) return []
-    return mergeGames(library.data.games, hltb.data?.entries ?? {})
+    return mergeGames(library.data.games, hltb.data?.entries ?? {}, hltb.data?.meta ?? {})
   }, [library.data, hltb.data])
 
   const maxHours = useMemo(() => {
@@ -143,9 +143,8 @@ export function LibraryScreen() {
           }
         }}
         onRefreshHltb={async () => {
-          if (!library.data?.games) return
           try {
-            await refreshHltb(queryClient, library.data.games)
+            await refreshHltb(queryClient)
           } catch (error) {
             toast.error(`Refresh HLTB failed: ${(error as Error).message}`)
           }
