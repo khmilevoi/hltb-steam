@@ -135,7 +135,6 @@ type HltbMeta = {
   source: HltbSource
   steamName: string
   overrideName: string | null
-  effectiveSearchName: string
 }
 
 type HltbResponse = {
@@ -149,10 +148,9 @@ Rules:
 
 - The API does not return an `editable` flag. The UI derives editability from `source`.
 - If a global direct mapping exists but HLTB detail loading fails, return `entries[appid] = null` with `source: 'steam-import'`. The row remains non-editable because the UI treats `source: 'steam-import'` as readonly.
-- If fallback search by override name or Steam name was attempted but produced no match, return `entries[appid] = null` with `source: 'none'`. The attempted name remains visible through `effectiveSearchName`.
+- If fallback search by override name or Steam name was attempted but produced no match, return `entries[appid] = null` with `source: 'none'`. The attempted name is derived in UI from `overrideName ?? steamName`.
 - For `source: 'steam-import'`, any dormant user override for the same appid should be ignored in UI behavior. The API may return `overrideName: null` for direct-mapped rows even if an old stored override exists.
 - `overrideName !== null` tells the UI an override exists; no separate `hasOverride` flag is needed.
-- `effectiveSearchName` is the name used for fallback lookup: `overrideName ?? steamName`.
 - `force=1` bypasses HLTB entry/name-search caches for the returned appids, but does not force a Steam library refresh and does not force HLTB Steam import unless the snapshot policy requires it. It still preserves the same lookup priority.
 
 ### `GET /api/hltb/:appid`
@@ -202,7 +200,7 @@ Use `react-data-grid` editing support:
 
 - `isCellEditable` derives editability from metadata and returns `true` only when `meta[appid].source !== 'steam-import'`.
 - Direct-mapped rows are readonly and show the matched HLTB name/status.
-- Fallback rows show the effective search name and can be edited inline.
+- Fallback rows show `getHltbSearchName(meta) = meta.overrideName ?? meta.steamName` and can be edited inline.
 - Committing an edit calls `PUT /api/hltb/overrides/:appid`.
 - If the committed value equals the Steam name or is blank after trim, it resets the override.
 - Pressing Escape cancels the local grid edit.
