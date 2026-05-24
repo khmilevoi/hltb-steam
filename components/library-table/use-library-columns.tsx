@@ -3,6 +3,8 @@ import type { Column, RenderHeaderCellProps } from 'react-data-grid'
 import type { GameRow } from '@/types/game'
 import { GameCoverCell } from './cells/game-cover-cell'
 import { HltbCell } from './cells/hltb-cell'
+import { HltbSearchNameCell } from './cells/hltb-search-name-cell'
+import { HltbSearchNameEditor } from './cells/hltb-search-name-editor'
 import { SortIcon } from './sort-icon'
 
 function hours(minutes: number): string {
@@ -20,7 +22,10 @@ function renderHeaderCell(name: string) {
   }
 }
 
-export function useLibraryColumns(hltbLoading: boolean): readonly Column<GameRow>[] {
+export function useLibraryColumns(
+  hltbLoading: boolean,
+  onHltbSearchNameCommit?: (row: GameRow, searchName: string | null) => void | Promise<void>,
+): readonly Column<GameRow>[] {
   return useMemo<Column<GameRow>[]>(
     () => [
       {
@@ -30,12 +35,26 @@ export function useLibraryColumns(hltbLoading: boolean): readonly Column<GameRow
         sortable: false,
         renderCell: ({ row }) => <GameCoverCell src={row.headerImageUrl} name={row.name} />,
       },
-      {
+   {
         key: 'name',
         name: 'Name',
-        sortable: true,
+        sortable: false,
+        width: 220,
+        editable: (row) => row.hltbMeta?.source !== 'steam-import',
         renderHeaderCell: renderHeaderCell('Name'),
-        renderCell: ({ row }) => <span className="font-medium">{row.name}</span>,
+        renderCell: ({ row }) => (
+          <HltbSearchNameCell
+            meta={row.hltbMeta}
+            matchedName={row.hltb?.matchedName ?? null}
+            onReset={() => onHltbSearchNameCommit?.(row, null)}
+          />
+        ),
+        renderEditCell: (props) => (
+          <HltbSearchNameEditor
+            {...props}
+            onCommit={(row, value) => onHltbSearchNameCommit?.(row, value)}
+          />
+        ),
       },
       {
         key: 'steamHours',
@@ -84,6 +103,6 @@ export function useLibraryColumns(hltbLoading: boolean): readonly Column<GameRow
         ),
       },
     ],
-    [hltbLoading],
+    [hltbLoading, onHltbSearchNameCommit],
   )
 }

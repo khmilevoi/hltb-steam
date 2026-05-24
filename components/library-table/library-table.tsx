@@ -11,10 +11,11 @@ import { useSortedRows } from './use-sorted-rows'
 type Props = {
   rows: readonly GameRow[]
   hltbLoading: boolean
+  onHltbSearchNameCommit?: (row: GameRow, searchName: string | null) => void | Promise<void>
 }
 
-export function LibraryTable({ rows, hltbLoading }: Props) {
-  const columns = useLibraryColumns(hltbLoading)
+export function LibraryTable({ rows, hltbLoading, onHltbSearchNameCommit }: Props) {
+  const columns = useLibraryColumns(hltbLoading, onHltbSearchNameCommit)
   const [sortColumns, setSortColumns] = usePersistedSortColumns()
   const sortedRows = useSortedRows(rows, sortColumns)
 
