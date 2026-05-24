@@ -36,6 +36,10 @@ library endpoint to return games.
 The server cache is stored in `.cache/` and is created automatically. Delete
 `.cache/` to wipe cached Steam library and HLTB results.
 
+HLTB matching first uses a shared Steam appid to HLTB id mapping discovered from
+HLTB's Steam import endpoint. Games without a direct mapping can be corrected per
+user by editing the HLTB Search value in the library table.
+
 ## Scripts
 
 ```bash
