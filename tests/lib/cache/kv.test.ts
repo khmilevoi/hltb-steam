@@ -1,9 +1,22 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { KvError } from '@/lib/errors'
 
-const { getItemMock, getKeysMock, removeItemMock, setItemMock } = vi.hoisted(() => ({
+const {
+  getCacheMock,
+  getItemMock,
+  getKeysMock,
+  runtimeCacheDeleteMock,
+  runtimeCacheGetMock,
+  runtimeCacheSetMock,
+  removeItemMock,
+  setItemMock,
+} = vi.hoisted(() => ({
+  getCacheMock: vi.fn(),
   getItemMock: vi.fn(),
   getKeysMock: vi.fn(),
+  runtimeCacheDeleteMock: vi.fn(),
+  runtimeCacheGetMock: vi.fn(),
+  runtimeCacheSetMock: vi.fn(),
   setItemMock: vi.fn(),
   removeItemMock: vi.fn(),
 }))
@@ -18,14 +31,28 @@ vi.mock('unstorage', () => ({
 }))
 
 vi.mock('unstorage/drivers/fs', () => ({ default: () => ({}) }))
+vi.mock('@vercel/functions', () => ({ getCache: getCacheMock }))
 
 beforeEach(() => {
+  delete process.env.VERCEL
+  getCacheMock.mockReset()
   getItemMock.mockReset()
   getKeysMock.mockReset()
+  runtimeCacheDeleteMock.mockReset()
+  runtimeCacheGetMock.mockReset()
+  runtimeCacheSetMock.mockReset()
   setItemMock.mockReset()
   removeItemMock.mockReset()
+  getCacheMock.mockReturnValue({
+    delete: runtimeCacheDeleteMock,
+    get: runtimeCacheGetMock,
+    set: runtimeCacheSetMock,
+  })
   setItemMock.mockResolvedValue(undefined)
   removeItemMock.mockResolvedValue(undefined)
+  runtimeCacheDeleteMock.mockResolvedValue(undefined)
+  runtimeCacheGetMock.mockResolvedValue(null)
+  runtimeCacheSetMock.mockResolvedValue(undefined)
 })
 
 import {
@@ -85,6 +112,21 @@ describe('local cache (unstorage fs)', () => {
     setItemMock.mockRejectedValueOnce(new Error('boom'))
     const result = await setLibrary('xx', [])
     expect(result).toBeInstanceOf(KvError)
+  })
+
+  it('uses Vercel Runtime Cache instead of local fs storage on Vercel', async () => {
+    process.env.VERCEL = '1'
+
+    const result = await setLibrary('xx', [])
+
+    expect(result).toBeUndefined()
+    expect(getCacheMock).toHaveBeenCalledWith({ namespace: 'hltb-steam' })
+    expect(runtimeCacheSetMock).toHaveBeenCalledWith(
+      'library:xx',
+      expect.objectContaining({ value: [], cachedAt: expect.any(String) }),
+      { name: 'library:xx' },
+    )
+    expect(setItemMock).not.toHaveBeenCalled()
   })
 
   it('getHltbMapping/setHltbMapping use steam appid mapping keys', async () => {

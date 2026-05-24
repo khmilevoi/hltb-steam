@@ -1,3 +1,4 @@
+import { getCache } from '@vercel/functions'
 import { createStorage } from 'unstorage'
 import fsDriver from 'unstorage/drivers/fs'
 import { KvError } from '@/lib/errors'
@@ -13,6 +14,28 @@ import type {
 const storage = createStorage({
   driver: fsDriver({ base: './.cache' }),
 })
+
+type StorageAdapter = {
+  getItem: (key: string) => Promise<unknown | null>
+  getKeys?: (base: string) => Promise<string[]>
+  removeItem: (key: string) => Promise<void>
+  setItem: (key: string, value: unknown) => Promise<void>
+}
+
+function isRuntimeCache(): boolean {
+  return process.env.VERCEL === '1'
+}
+
+function getStorage(): StorageAdapter {
+  if (!isRuntimeCache()) return storage as StorageAdapter
+
+  const cache = getCache({ namespace: 'hltb-steam' })
+  return {
+    getItem: (key) => cache.get(key),
+    removeItem: (key) => cache.delete(key),
+    setItem: (key, value) => cache.set(key, value, { name: key }),
+  }
+}
 
 const LIBRARY_TTL_MS = 60 * 60 * 1000
 const HLTB_TTL_MS = 7 * 24 * 60 * 60 * 1000
@@ -48,10 +71,12 @@ export function isExpired(cachedAt: string, ttlMs: number): boolean {
 }
 
 async function getRaw<T>(key: string): Promise<KvError | Cached<T> | null> {
-  const raw = await storage.getItem(key).catch(
-    (error) => new KvError({ op: 'get', key, cause: error }),
-  )
-  if (raw instanceof Error) return raw
+  let raw: unknown | null
+  try {
+    raw = await getStorage().getItem(key)
+  } catch (error) {
+    return new KvError({ op: 'get', key, cause: error })
+  }
   if (raw === null) return null
   return raw as Cached<T>
 }
@@ -66,25 +91,30 @@ async function get<T>(key: string, ttlMs: number): Promise<KvError | Cached<T> |
 
 async function set<T>(key: string, value: T): Promise<KvError | void> {
   const payload: Cached<T> = { value, cachedAt: new Date().toISOString() }
-  const result = await storage.setItem(key, payload).catch(
-    (error) => new KvError({ op: 'set', key, cause: error }),
-  )
-  if (result instanceof Error) return result
+  try {
+    await getStorage().setItem(key, payload)
+  } catch (error) {
+    return new KvError({ op: 'set', key, cause: error })
+  }
 }
 
 async function remove(key: string): Promise<KvError | void> {
-  const result = await storage.removeItem(key).catch(
-    (error) => new KvError({ op: 'remove', key, cause: error }),
-  )
-  if (result instanceof Error) return result
+  try {
+    await getStorage().removeItem(key)
+  } catch (error) {
+    return new KvError({ op: 'remove', key, cause: error })
+  }
 }
 
 async function getKeys(base: string): Promise<KvError | string[]> {
-  const keys = await storage.getKeys(base).catch(
-    (error) => new KvError({ op: 'getKeys', key: base, cause: error }),
-  )
-  if (keys instanceof Error) return keys
-  return keys
+  const storage = getStorage()
+  if (!storage.getKeys) return new KvError({ op: 'getKeys', key: base })
+
+  try {
+    return await storage.getKeys(base)
+  } catch (error) {
+    return new KvError({ op: 'getKeys', key: base, cause: error })
+  }
 }
 
 export function getLibrary(steamId: string) {

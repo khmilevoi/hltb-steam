@@ -8,7 +8,7 @@ by playtime.
 
 - Next.js 16 App Router + TypeScript
 - Auth.js v5 + Steam OpenID via `next-auth-steam`
-- `unstorage` fs-driver local cache in `.cache/`
+- `unstorage` fs-driver local cache in `.cache/`, Vercel Runtime Cache in production
 - TanStack Query v5 + TanStack Table v8
 - shadcn/ui + Tailwind CSS
 - `errore` errors-as-values outside TanStack Query fetch boundaries
@@ -33,8 +33,10 @@ NEXTAUTH_SECRET=    # openssl rand -base64 32
 Your Steam profile and Game details privacy setting must be public for the
 library endpoint to return games.
 
-The server cache is stored in `.cache/` and is created automatically. Delete
-`.cache/` to wipe cached Steam library and HLTB results.
+In local development, the server cache is stored in `.cache/` and is created
+automatically. Delete `.cache/` to wipe cached Steam library and HLTB results.
+On Vercel, the same cache helpers use Vercel Runtime Cache instead of writing to
+the function filesystem.
 
 HLTB matching first uses a shared Steam appid to HLTB id mapping discovered from
 HLTB's Steam import endpoint. Games without a direct mapping can be corrected per
