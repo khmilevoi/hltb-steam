@@ -1,12 +1,7 @@
+import * as errore from "errore";
 import { auth } from "@/auth";
 import { json } from "@/lib/http";
 import { loadUserLibrary } from "@/lib/library/server";
-
-function mapLibraryError(error: Error) {
-  if (error.name === "SteamPrivateProfileError") return json(403, { error: "private_profile" });
-  if (error.name === "SteamUnavailableError") return json(502, { error: "steam_unavailable" });
-  return json(500, { error: "internal" });
-}
 
 export async function GET(req: Request) {
   const session = await auth();
@@ -16,9 +11,11 @@ export async function GET(req: Request) {
   const force = new URL(req.url).searchParams.get("force") === "1";
 
   const result = await loadUserLibrary({ steamId, force });
-  if (result instanceof Error) {
-    return mapLibraryError(result);
-  }
+  if (result instanceof Error) return errore.matchError(result, {
+    SteamPrivateProfileError: () => json(403, { error: "private_profile" }),
+    SteamUnavailableError: () => json(502, { error: "steam_unavailable" }),
+    Error: () => json(500, { error: "internal" }),
+  });
 
   return json(200, { games: result.games, cachedAt: result.cachedAt });
 }

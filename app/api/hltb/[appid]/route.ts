@@ -1,3 +1,4 @@
+import * as errore from 'errore'
 import { auth } from '@/auth'
 import { json } from '@/lib/http'
 import { resolveHltbForGame } from '@/lib/hltb/resolve'
@@ -7,12 +8,6 @@ function parseAppid(value: string): number | null {
   const appid = Number(value)
   if (!Number.isInteger(appid) || appid <= 0) return null
   return appid
-}
-
-function mapLibraryError(error: Error) {
-  if (error.name === 'SteamPrivateProfileError') return json(403, { error: 'private_profile' })
-  if (error.name === 'SteamUnavailableError') return json(502, { error: 'steam_unavailable' })
-  return json(500, { error: 'internal' })
 }
 
 export async function GET(
@@ -28,7 +23,11 @@ export async function GET(
 
   const steamId = session.user.steamId
   const library = await loadUserLibrary({ steamId, force: false })
-  if (library instanceof Error) return mapLibraryError(library)
+  if (library instanceof Error) return errore.matchError(library, {
+    SteamPrivateProfileError: () => json(403, { error: 'private_profile' }),
+    SteamUnavailableError: () => json(502, { error: 'steam_unavailable' }),
+    Error: () => json(500, { error: 'internal' }),
+  })
 
   const game = library.games.find((candidate) => candidate.appid === appid)
   if (!game) return json(404, { error: 'not_found' })

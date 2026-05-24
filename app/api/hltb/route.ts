@@ -1,13 +1,8 @@
+import * as errore from 'errore'
 import { auth } from '@/auth'
 import { json } from '@/lib/http'
 import { resolveHltbForLibrary } from '@/lib/hltb/resolve'
 import { loadUserLibrary } from '@/lib/library/server'
-
-function mapLibraryError(error: Error) {
-  if (error.name === 'SteamPrivateProfileError') return json(403, { error: 'private_profile' })
-  if (error.name === 'SteamUnavailableError') return json(502, { error: 'steam_unavailable' })
-  return json(500, { error: 'internal' })
-}
 
 export async function GET(req: Request) {
   const session = await auth()
@@ -16,7 +11,11 @@ export async function GET(req: Request) {
   const steamId = session.user.steamId
   const force = new URL(req.url).searchParams.get('force') === '1'
   const library = await loadUserLibrary({ steamId, force: false })
-  if (library instanceof Error) return mapLibraryError(library)
+  if (library instanceof Error) return errore.matchError(library, {
+    SteamPrivateProfileError: () => json(403, { error: 'private_profile' }),
+    SteamUnavailableError: () => json(502, { error: 'steam_unavailable' }),
+    Error: () => json(500, { error: 'internal' }),
+  })
 
   const result = await resolveHltbForLibrary({
     steamId,

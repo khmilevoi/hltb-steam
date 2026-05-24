@@ -1,5 +1,6 @@
 import * as kv from '@/lib/cache/kv'
 import * as steam from '@/lib/steam/client'
+import { SteamPrivateProfileError, SteamUnavailableError } from '@/lib/errors'
 import type { SteamGame } from '@/types/game'
 
 export type LoadUserLibraryResult =
@@ -7,7 +8,8 @@ export type LoadUserLibraryResult =
       games: SteamGame[]
       cachedAt: string | null
     }
-  | Error
+  | SteamPrivateProfileError
+  | SteamUnavailableError
 
 export async function loadUserLibrary({
   force,
