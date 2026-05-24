@@ -10,6 +10,7 @@ function game(overrides: Partial<GameRow> & { name: string; appid: number }): Ga
     playtimeMinutes: 0,
     headerImageUrl: '',
     hltb: null,
+    hltbMeta: null,
     ...rest,
   }
 }

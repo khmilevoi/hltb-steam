@@ -15,6 +15,7 @@ const rows: GameRow[] = [
       hltbId: 11,
       matchedName: 'Portal',
     },
+    hltbMeta: null,
   },
   {
     appid: 2,
@@ -28,6 +29,7 @@ const rows: GameRow[] = [
       hltbId: 22,
       matchedName: 'The Witcher 3',
     },
+    hltbMeta: null,
   },
   {
     appid: 3,
@@ -35,6 +37,7 @@ const rows: GameRow[] = [
     playtimeMinutes: 0,
     headerImageUrl: 'x',
     hltb: null,
+    hltbMeta: null,
   },
 ]
 
