@@ -46,7 +46,7 @@ export function useLibraryColumns(
         renderCell: ({ row }) => (
           <HltbSearchNameCell
             meta={row.hltbMeta}
-            matchedName={row.hltb?.matchedName ?? null}
+            matchedName={row.hltb?.matchedName ?? row.name}
             isSaving={savingAppids?.has(row.appid) ?? false}
             onReset={() => onHltbSearchNameCommit?.(row, null)}
           />

@@ -9,7 +9,11 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "deploy": "vercel",
+    "deploy:prod": "vercel --prod",
+    "env:pull": "vercel env pull",
+    "env:list": "vercel env ls"
   },
   "dependencies": {
     "@tanstack/query-sync-storage-persister": "^5.100.13",
