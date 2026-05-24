@@ -9,7 +9,12 @@ import { LibraryTable } from '@/components/library-table'
 import { RefreshControls } from '@/components/refresh-controls'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { refreshHltb, useHltb } from '@/hooks/use-hltb'
+import {
+  HLTB_QUERY_KEY,
+  refreshHltb,
+  saveHltbOverrideAndRefresh,
+  useHltb,
+} from '@/hooks/use-hltb'
 import { refreshLibrary, useLibrary } from '@/hooks/use-library'
 import { LibraryFetchError } from '@/lib/errors'
 import { filterByHltbRange, searchByName } from '@/lib/library/filters'
@@ -138,6 +143,7 @@ export function LibraryScreen() {
         onRefreshLibrary={async () => {
           try {
             await refreshLibrary(queryClient)
+            await queryClient.invalidateQueries({ queryKey: HLTB_QUERY_KEY })
           } catch (error) {
             toast.error(`Refresh library failed: ${(error as Error).message}`)
           }
@@ -158,7 +164,23 @@ export function LibraryScreen() {
           ))}
         </div>
       ) : (
-        <LibraryTable rows={visibleRows} hltbLoading={hltb.isFetching} />
+        <LibraryTable
+          rows={visibleRows}
+          hltbLoading={hltb.isFetching}
+          onHltbSearchNameCommit={async (row, searchName) => {
+            const normalized = searchName?.trim() ?? ''
+            const nextName = normalized === '' || normalized === row.name ? null : normalized
+            try {
+              await saveHltbOverrideAndRefresh({
+                appid: row.appid,
+                queryClient,
+                searchName: nextName,
+              })
+            } catch (error) {
+              toast.error(`HLTB override update failed: ${(error as Error).message}`)
+            }
+          }}
+        />
       )}
     </main>
   )
