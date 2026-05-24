@@ -20,7 +20,7 @@ beforeEach(() => {
   vi.stubGlobal('fetch', fetchMock)
 })
 
-import { searchByName } from '@/lib/hltb/client'
+import { fetchById, fetchSteamImport, searchByName } from '@/lib/hltb/client'
 
 describe('searchByName (hltb client)', () => {
   it('returns a matched entry', async () => {
@@ -141,5 +141,111 @@ describe('searchByName (hltb client)', () => {
     const result = await searchByName('Anything')
 
     expect(result).toBeInstanceOf(HltbFetchError)
+  })
+})
+
+describe('fetchSteamImport', () => {
+  it('posts to HLTB Steam import endpoint and maps valid rows', async () => {
+    fetchMock.mockResolvedValueOnce(
+      Response.json({
+        games: [
+          {
+            steam_id: 620,
+            hltb_id: 7230,
+            hltb_name: 'Portal',
+            hltb_time: 10800,
+          },
+          { steam_id: 'bad', hltb_id: 1, hltb_name: 'Bad' },
+        ],
+      }),
+    )
+
+    const result = await fetchSteamImport('steam-1')
+
+    expect(result).toEqual([{ steamAppId: 620, hltbId: 7230, hltbName: 'Portal' }])
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://howlongtobeat.com/api/steam/getSteamImportData',
+      expect.objectContaining({
+        body: JSON.stringify({ steamUserId: 'steam-1', steamOmitData: 0 }),
+        method: 'POST',
+      }),
+    )
+  })
+
+  it('returns HltbFetchError when import response has error', async () => {
+    fetchMock.mockResolvedValueOnce(Response.json({ error: 'private' }))
+
+    const result = await fetchSteamImport('steam-1')
+
+    expect(result).toBeInstanceOf(HltbFetchError)
+  })
+})
+
+describe('fetchById', () => {
+  it('fetches Next game data and maps details to an HLTB entry', async () => {
+    fetchMock
+      .mockResolvedValueOnce(new Response('<script>{"buildId":"build-1"}</script>'))
+      .mockResolvedValueOnce(
+        Response.json({
+          pageProps: {
+            game: {
+              data: {
+                game: [
+                  {
+                    game_id: 7230,
+                    game_name: 'Portal',
+                    comp_main: 3 * 3600,
+                    comp_plus: 5 * 3600,
+                    comp_100: 8 * 3600,
+                  },
+                ],
+              },
+            },
+          },
+        }),
+      )
+
+    const result = await fetchById(7230)
+
+    expect(result).toEqual({
+      mainHours: 3,
+      mainExtraHours: 5,
+      completionistHours: 8,
+      hltbId: 7230,
+      matchedName: 'Portal',
+    })
+    expect(fetchMock.mock.calls[1]?.[0]).toBe(
+      'https://howlongtobeat.com/_next/data/build-1/game/7230.json',
+    )
+  })
+
+  it('returns null for a valid empty game array', async () => {
+    fetchMock
+      .mockResolvedValueOnce(new Response('<script>{"buildId":"build-1"}</script>'))
+      .mockResolvedValueOnce(
+        Response.json({ pageProps: { game: { data: { game: [] } } } }),
+      )
+
+    expect(await fetchById(7230)).toBeNull()
+  })
+
+  it('returns HltbFetchError on malformed data', async () => {
+    fetchMock
+      .mockResolvedValueOnce(new Response('<script>{"buildId":"build-1"}</script>'))
+      .mockResolvedValueOnce(Response.json({ nope: true }))
+
+    const result = await fetchById(7230)
+
+    expect(result).toBeInstanceOf(HltbFetchError)
+  })
+
+  it('returns HltbRateLimitError when the details response is 429', async () => {
+    fetchMock
+      .mockResolvedValueOnce(new Response('<script>{"buildId":"build-1"}</script>'))
+      .mockResolvedValueOnce(new Response('rate limited', { status: 429 }))
+
+    const result = await fetchById(7230)
+
+    expect(result).toBeInstanceOf(HltbRateLimitError)
   })
 })

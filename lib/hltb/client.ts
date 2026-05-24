@@ -20,6 +20,27 @@ type RawHltbResult = {
   comp_100?: number
 }
 
+type HltbSteamImportResponse = {
+  error?: unknown
+  games?: unknown[]
+}
+
+type NextGameResponse = {
+  pageProps?: {
+    game?: {
+      data?: {
+        game?: RawHltbResult[]
+      }
+    }
+  }
+}
+
+export type HltbSteamImportGame = {
+  steamAppId: number
+  hltbId: number
+  hltbName: string
+}
+
 function toCandidate(result: RawHltbResult): HltbCandidate {
   const num = (value: unknown) =>
     typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null
@@ -34,6 +55,17 @@ function toCandidate(result: RawHltbResult): HltbCandidate {
     main: secondsToHours(result.comp_main),
     mainExtra: secondsToHours(result.comp_plus),
     completionist: secondsToHours(result.comp_100),
+  }
+}
+
+function toEntry(result: RawHltbResult): HltbEntry {
+  const candidate = toCandidate(result)
+  return {
+    mainHours: candidate.main,
+    mainExtraHours: candidate.mainExtra,
+    completionistHours: candidate.completionist,
+    hltbId: candidate.id,
+    matchedName: candidate.name,
   }
 }
 
@@ -139,4 +171,104 @@ export async function searchByName(
   if (!Array.isArray(search.data) || search.data.length === 0) return null
   const candidates = search.data.map(toCandidate)
   return pickBestMatch(candidates, name)
+}
+
+function toImportGame(row: unknown): HltbSteamImportGame | null {
+  if (typeof row !== 'object' || row === null) return null
+  const value = row as Record<string, unknown>
+  const steamAppId = Number(value.steam_id)
+  const hltbId = Number(value.hltb_id)
+  const hltbName = value.hltb_name
+  if (
+    !Number.isFinite(steamAppId) ||
+    steamAppId <= 0 ||
+    !Number.isFinite(hltbId) ||
+    hltbId <= 0 ||
+    typeof hltbName !== 'string'
+  ) {
+    return null
+  }
+  return { steamAppId, hltbId, hltbName }
+}
+
+export async function fetchSteamImport(
+  steamId: string,
+): Promise<HltbFetchError | HltbSteamImportGame[]> {
+  let data: HltbSteamImportResponse | HltbFetchError | HltbRateLimitError
+  try {
+    const response = await fetch(`${HLTB_BASE_URL}/api/steam/getSteamImportData`, {
+      body: JSON.stringify({ steamUserId: steamId, steamOmitData: 0 }),
+      cache: 'no-store',
+      headers: {
+        ...baseHeaders,
+        'Content-Type': 'application/json',
+      },
+      method: 'POST',
+    })
+    data = await readJson<HltbSteamImportResponse>(response)
+  } catch (error) {
+    return new HltbFetchError({ name: 'HLTB Steam import', reason: 'import threw', cause: error })
+  }
+
+  if (data instanceof HltbRateLimitError) {
+    return new HltbFetchError({ name: 'HLTB Steam import', reason: data.message })
+  }
+  if (data instanceof Error) return data
+  if (data.error !== undefined) {
+    return new HltbFetchError({ name: 'HLTB Steam import', reason: String(data.error) })
+  }
+  if (!Array.isArray(data.games)) return []
+  return data.games.flatMap((row) => {
+    const game = toImportGame(row)
+    return game ? [game] : []
+  })
+}
+
+async function fetchBuildId(): Promise<string | HltbFetchError> {
+  try {
+    const response = await fetch(HLTB_BASE_URL, { cache: 'no-store', headers: baseHeaders })
+    if (!response.ok) {
+      return new HltbFetchError({ name: 'HLTB', reason: `HTTP ${response.status}` })
+    }
+    const html = await response.text()
+    const match = html.match(/"buildId":"([^"]+)"/)
+    if (!match) return new HltbFetchError({ name: 'HLTB', reason: 'missing build id' })
+    return match[1]
+  } catch (error) {
+    return new HltbFetchError({ name: 'HLTB', reason: 'build id fetch threw', cause: error })
+  }
+}
+
+export async function fetchById(
+  hltbId: number,
+): Promise<HltbFetchError | HltbRateLimitError | HltbEntry | null> {
+  const buildId = await fetchBuildId()
+  if (buildId instanceof Error) return buildId
+
+  let data: NextGameResponse | HltbFetchError | HltbRateLimitError
+  try {
+    const response = await fetch(`${HLTB_BASE_URL}/_next/data/${buildId}/game/${hltbId}.json`, {
+      cache: 'no-store',
+      headers: baseHeaders,
+    })
+    data = await readJson<NextGameResponse>(response)
+  } catch (error) {
+    return new HltbFetchError({ name: hltbId, reason: 'detail fetch threw', cause: error })
+  }
+
+  if (data instanceof Error) return data
+  const games = data.pageProps?.game?.data?.game
+  if (!Array.isArray(games)) {
+    return new HltbFetchError({ name: hltbId, reason: 'malformed detail response' })
+  }
+  if (games.length === 0) return null
+  const raw = games[0]
+  if (
+    raw === undefined ||
+    typeof raw.game_name !== 'string' ||
+    !Number.isFinite(Number(raw.game_id))
+  ) {
+    return new HltbFetchError({ name: hltbId, reason: 'malformed game detail' })
+  }
+  return toEntry(raw)
 }
