@@ -129,13 +129,11 @@ async function resolveMappedGame({
 }
 
 async function resolveFallbackGame({
-  force,
   game,
   steamId,
 }: {
   steamId: string
   game: SteamGame
-  force: boolean
 }): Promise<HltbSingleResponse> {
   const override = await kv.getHltbOverrideName(steamId, game.appid)
   if (override instanceof Error) warn(`KV override read failed for ${game.appid}:`, override)
@@ -143,23 +141,6 @@ async function resolveFallbackGame({
   const overrideName = override instanceof Error ? null : (override?.value.searchName ?? null)
   const searchName = overrideName ?? game.name
   const source = overrideName ? 'override-name' : 'steam-name'
-
-  if (!force) {
-    const cached = await kv.getHltb(searchName)
-    if (cached instanceof Error) {
-      warn(`KV HLTB name read failed for ${searchName}:`, cached)
-    } else if (cached !== null) {
-      return {
-        entry: cached.value,
-        cachedAt: cached.cachedAt,
-        meta: {
-          source: cached.value === null ? 'none' : source,
-          steamName: game.name,
-          overrideName,
-        },
-      }
-    }
-  }
 
   const entry = await hltb.searchByName(searchName)
   if (entry instanceof Error) {
@@ -170,9 +151,6 @@ async function resolveFallbackGame({
       meta: { source: 'none', steamName: game.name, overrideName },
     }
   }
-
-  const writeResult = await kv.setHltb(searchName, entry)
-  if (writeResult instanceof Error) warn(`KV HLTB name write failed for ${searchName}:`, writeResult)
 
   return {
     entry,
@@ -197,7 +175,7 @@ async function resolveGameWithMapping({
   mapping: HltbSteamMapping | null
 }) {
   if (mapping) return resolveMappedGame({ game, mapping, force })
-  return resolveFallbackGame({ steamId, game, force })
+  return resolveFallbackGame({ steamId, game })
 }
 
 export async function resolveHltbForGame({

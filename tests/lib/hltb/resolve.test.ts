@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { HltbRateLimitError, KvError } from '@/lib/errors'
+import { HltbRateLimitError } from '@/lib/errors'
 import type { HltbEntry, SteamGame } from '@/types/game'
 
 const {
@@ -8,13 +8,11 @@ const {
   getHltbEntryByIdMock,
   getHltbLibrarySnapshotMock,
   getHltbMappingMock,
-  getHltbMock,
   getHltbOverrideNameMock,
   searchByNameMock,
   setHltbEntryByIdMock,
   setHltbLibrarySnapshotMock,
   setHltbMappingMock,
-  setHltbMock,
   warnMock,
 } = vi.hoisted(() => ({
   fetchByIdMock: vi.fn(),
@@ -22,26 +20,22 @@ const {
   getHltbEntryByIdMock: vi.fn(),
   getHltbLibrarySnapshotMock: vi.fn(),
   getHltbMappingMock: vi.fn(),
-  getHltbMock: vi.fn(),
   getHltbOverrideNameMock: vi.fn(),
   searchByNameMock: vi.fn(),
   setHltbEntryByIdMock: vi.fn(),
   setHltbLibrarySnapshotMock: vi.fn(),
   setHltbMappingMock: vi.fn(),
-  setHltbMock: vi.fn(),
   warnMock: vi.fn(),
 }))
 
 vi.mock('@/lib/cache/kv', () => ({
   HLTB_SNAPSHOT_TTL_MS: 12 * 60 * 60 * 1000,
-  getHltb: getHltbMock,
   getHltbEntryById: getHltbEntryByIdMock,
   getHltbLibrarySnapshot: getHltbLibrarySnapshotMock,
   getHltbMapping: getHltbMappingMock,
   getHltbOverrideName: getHltbOverrideNameMock,
   isExpired: (cachedAt: string, ttlMs: number) =>
     Date.now() - new Date(cachedAt).getTime() >= ttlMs,
-  setHltb: setHltbMock,
   setHltbEntryById: setHltbEntryByIdMock,
   setHltbLibrarySnapshot: setHltbLibrarySnapshotMock,
   setHltbMapping: setHltbMappingMock,
@@ -60,13 +54,11 @@ beforeEach(() => {
   getHltbEntryByIdMock.mockReset()
   getHltbLibrarySnapshotMock.mockReset()
   getHltbMappingMock.mockReset()
-  getHltbMock.mockReset()
   getHltbOverrideNameMock.mockReset()
   searchByNameMock.mockReset()
   setHltbEntryByIdMock.mockReset()
   setHltbLibrarySnapshotMock.mockReset()
   setHltbMappingMock.mockReset()
-  setHltbMock.mockReset()
   warnMock.mockReset()
   vi.spyOn(console, 'warn').mockImplementation(warnMock)
 
@@ -77,12 +69,10 @@ beforeEach(() => {
   })
   getHltbEntryByIdMock.mockResolvedValue(null)
   getHltbOverrideNameMock.mockResolvedValue(null)
-  getHltbMock.mockResolvedValue(null)
   searchByNameMock.mockResolvedValue(null)
   setHltbEntryByIdMock.mockResolvedValue(undefined)
   setHltbLibrarySnapshotMock.mockResolvedValue(undefined)
   setHltbMappingMock.mockResolvedValue(undefined)
-  setHltbMock.mockResolvedValue(undefined)
 })
 
 import { resolveHltbForGame, resolveHltbForLibrary } from '@/lib/hltb/resolve'
@@ -176,7 +166,7 @@ describe('resolveHltbForLibrary', () => {
     })
   })
 
-  it('force bypasses entry and name cache reads but still writes cache', async () => {
+  it('force bypasses entry cache reads but still writes cache', async () => {
     getHltbMappingMock.mockResolvedValueOnce({
       value: {
         steamAppId: 1,
@@ -193,14 +183,17 @@ describe('resolveHltbForLibrary', () => {
 
     expect(getHltbEntryByIdMock).not.toHaveBeenCalled()
     expect(setHltbEntryByIdMock).toHaveBeenCalledWith(7230, portalEntry)
+  })
 
+  it('fallback branch always calls searchByName under force=false', async () => {
     getHltbMappingMock.mockResolvedValueOnce(null)
     searchByNameMock.mockResolvedValueOnce(portalEntry)
 
-    await resolveHltbForGame({ steamId: 'steam-1', game: games[0], force: true })
+    const result = await resolveHltbForGame({ steamId: 'steam-1', game: games[0], force: false })
 
-    expect(getHltbMock).not.toHaveBeenCalled()
-    expect(setHltbMock).toHaveBeenCalledWith('Portal', portalEntry)
+    expect(searchByNameMock).toHaveBeenCalledWith('Portal')
+    expect(result.entry).toEqual(portalEntry)
+    expect(result.meta).toEqual({ source: 'steam-name', steamName: 'Portal', overrideName: null })
   })
 
   it('global mapping ignores dormant override and treats detail errors as misses', async () => {
@@ -228,8 +221,7 @@ describe('resolveHltbForLibrary', () => {
     expect(warnMock).toHaveBeenCalled()
   })
 
-  it('logs KV failures and returns source none on fallback miss', async () => {
-    getHltbMock.mockResolvedValueOnce(new KvError({ op: 'get', key: 'hltb:v2:portal' }))
+  it('returns source none when fallback search misses', async () => {
     searchByNameMock.mockResolvedValueOnce(null)
 
     const result = await resolveHltbForGame({ steamId: 'steam-1', game: games[0], force: false })
@@ -239,6 +231,5 @@ describe('resolveHltbForLibrary', () => {
       cachedAt: null,
       meta: { source: 'none', steamName: 'Portal', overrideName: null },
     })
-    expect(warnMock).toHaveBeenCalled()
   })
 })

@@ -30,14 +30,12 @@ beforeEach(() => {
 
 import {
   deleteHltbOverrideName,
-  getHltb,
   getHltbEntryById,
   getHltbLibrarySnapshot,
   getHltbMapping,
   getHltbOverrideName,
   getHltbOverrideNames,
   getLibrary,
-  setHltb,
   setHltbEntryById,
   setHltbLibrarySnapshot,
   setHltbMapping,
@@ -87,25 +85,6 @@ describe('local cache (unstorage fs)', () => {
     setItemMock.mockRejectedValueOnce(new Error('boom'))
     const result = await setLibrary('xx', [])
     expect(result).toBeInstanceOf(KvError)
-  })
-
-  it('getHltb/setHltb use normalized name in key', async () => {
-    getItemMock.mockResolvedValueOnce(null)
-    expect(await getHltb('Witcher 3')).toBeNull()
-    expect(getItemMock).toHaveBeenCalledWith('hltb:v2:witcher 3')
-
-    setItemMock.mockResolvedValueOnce(undefined)
-    await setHltb('Witcher 3', null)
-    expect(setItemMock).toHaveBeenCalledWith(
-      'hltb:v2:witcher 3',
-      expect.objectContaining({ value: null }),
-    )
-  })
-
-  it('getHltb returns null when entry is older than 7 days', async () => {
-    const stale = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString()
-    getItemMock.mockResolvedValueOnce({ value: null, cachedAt: stale })
-    expect(await getHltb('Witcher 3')).toBeNull()
   })
 
   it('getHltbMapping/setHltbMapping use steam appid mapping keys', async () => {

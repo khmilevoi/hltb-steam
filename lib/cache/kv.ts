@@ -1,7 +1,6 @@
 import { createStorage } from 'unstorage'
 import fsDriver from 'unstorage/drivers/fs'
 import { KvError } from '@/lib/errors'
-import { normalizeName } from '@/lib/hltb/matcher'
 import type {
   Cached,
   HltbEntry,
@@ -21,10 +20,6 @@ export const HLTB_SNAPSHOT_TTL_MS = 12 * 60 * 60 * 1000
 
 function libraryKey(steamId: string) {
   return `library:${steamId}`
-}
-
-function hltbKey(name: string) {
-  return `hltb:v2:${normalizeName(name)}`
 }
 
 function hltbMappingKey(appid: number) {
@@ -98,14 +93,6 @@ export function getLibrary(steamId: string) {
 
 export function setLibrary(steamId: string, games: SteamGame[]) {
   return set(libraryKey(steamId), games)
-}
-
-export function getHltb(name: string) {
-  return get<HltbEntry | null>(hltbKey(name), HLTB_TTL_MS)
-}
-
-export function setHltb(name: string, entry: HltbEntry | null) {
-  return set(hltbKey(name), entry)
 }
 
 export function getHltbMapping(appid: number) {
