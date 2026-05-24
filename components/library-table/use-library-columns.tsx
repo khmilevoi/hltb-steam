@@ -24,6 +24,7 @@ function renderHeaderCell(name: string) {
 
 export function useLibraryColumns(
   hltbLoading: boolean,
+  savingAppids?: ReadonlySet<number>,
   onHltbSearchNameCommit?: (row: GameRow, searchName: string | null) => void | Promise<void>,
 ): readonly Column<GameRow>[] {
   return useMemo<Column<GameRow>[]>(
@@ -35,7 +36,7 @@ export function useLibraryColumns(
         sortable: false,
         renderCell: ({ row }) => <GameCoverCell src={row.headerImageUrl} name={row.name} />,
       },
-   {
+      {
         key: 'name',
         name: 'Name',
         sortable: false,
@@ -46,6 +47,7 @@ export function useLibraryColumns(
           <HltbSearchNameCell
             meta={row.hltbMeta}
             matchedName={row.hltb?.matchedName ?? null}
+            isSaving={savingAppids?.has(row.appid) ?? false}
             onReset={() => onHltbSearchNameCommit?.(row, null)}
           />
         ),
@@ -103,6 +105,6 @@ export function useLibraryColumns(
         ),
       },
     ],
-    [hltbLoading, onHltbSearchNameCommit],
+    [hltbLoading, savingAppids, onHltbSearchNameCommit],
   )
 }

@@ -82,6 +82,7 @@ export function LibraryScreen() {
   }, [rows])
 
   const [filters, setFilters] = useState<LibraryFiltersValue>(readStoredFilters)
+  const [savingAppids, setSavingAppids] = useState<ReadonlySet<number>>(() => new Set())
 
   const visibleRows = useMemo(() => {
     const searched = searchByName(rows, filters.query)
@@ -167,9 +168,11 @@ export function LibraryScreen() {
         <LibraryTable
           rows={visibleRows}
           hltbLoading={hltb.isFetching}
+          savingAppids={savingAppids}
           onHltbSearchNameCommit={async (row, searchName) => {
             const normalized = searchName?.trim() ?? ''
             const nextName = normalized === '' || normalized === row.name ? null : normalized
+            setSavingAppids((prev) => new Set([...prev, row.appid]))
             try {
               await saveHltbOverrideAndRefresh({
                 appid: row.appid,
@@ -178,6 +181,12 @@ export function LibraryScreen() {
               })
             } catch (error) {
               toast.error(`HLTB override update failed: ${(error as Error).message}`)
+            } finally {
+              setSavingAppids((prev) => {
+                const next = new Set(prev)
+                next.delete(row.appid)
+                return next
+              })
             }
           }}
         />

@@ -46,9 +46,22 @@ export async function saveHltbOverrideAndRefresh({
   queryClient: QueryClient
   searchName: string | null
 }) {
-  await putHltbOverrideName({ appid, searchName })
-  const single = await fetchHltbGame({ appid })
-  queryClient.setQueryData(HLTB_QUERY_KEY, (old: HltbResponse | undefined) =>
-    mergeSingleHltbResult(old, appid, single),
-  )
+  const previousData = queryClient.getQueryData<HltbResponse>(HLTB_QUERY_KEY)
+  queryClient.setQueryData(HLTB_QUERY_KEY, (old: HltbResponse | undefined) => {
+    if (!old?.meta[appid]) return old
+    return {
+      ...old,
+      meta: { ...old.meta, [appid]: { ...old.meta[appid], overrideName: searchName } },
+    }
+  })
+  try {
+    await putHltbOverrideName({ appid, searchName })
+    const single = await fetchHltbGame({ appid })
+    queryClient.setQueryData(HLTB_QUERY_KEY, (old: HltbResponse | undefined) =>
+      mergeSingleHltbResult(old, appid, single),
+    )
+  } catch (error) {
+    queryClient.setQueryData(HLTB_QUERY_KEY, previousData)
+    throw error
+  }
 }
