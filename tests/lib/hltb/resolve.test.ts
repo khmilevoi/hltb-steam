@@ -1,0 +1,244 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { HltbRateLimitError, KvError } from '@/lib/errors'
+import type { HltbEntry, SteamGame } from '@/types/game'
+
+const {
+  fetchByIdMock,
+  fetchSteamImportMock,
+  getHltbEntryByIdMock,
+  getHltbLibrarySnapshotMock,
+  getHltbMappingMock,
+  getHltbMock,
+  getHltbOverrideNameMock,
+  searchByNameMock,
+  setHltbEntryByIdMock,
+  setHltbLibrarySnapshotMock,
+  setHltbMappingMock,
+  setHltbMock,
+  warnMock,
+} = vi.hoisted(() => ({
+  fetchByIdMock: vi.fn(),
+  fetchSteamImportMock: vi.fn(),
+  getHltbEntryByIdMock: vi.fn(),
+  getHltbLibrarySnapshotMock: vi.fn(),
+  getHltbMappingMock: vi.fn(),
+  getHltbMock: vi.fn(),
+  getHltbOverrideNameMock: vi.fn(),
+  searchByNameMock: vi.fn(),
+  setHltbEntryByIdMock: vi.fn(),
+  setHltbLibrarySnapshotMock: vi.fn(),
+  setHltbMappingMock: vi.fn(),
+  setHltbMock: vi.fn(),
+  warnMock: vi.fn(),
+}))
+
+vi.mock('@/lib/cache/kv', () => ({
+  HLTB_SNAPSHOT_TTL_MS: 12 * 60 * 60 * 1000,
+  getHltb: getHltbMock,
+  getHltbEntryById: getHltbEntryByIdMock,
+  getHltbLibrarySnapshot: getHltbLibrarySnapshotMock,
+  getHltbMapping: getHltbMappingMock,
+  getHltbOverrideName: getHltbOverrideNameMock,
+  isExpired: (cachedAt: string, ttlMs: number) =>
+    Date.now() - new Date(cachedAt).getTime() >= ttlMs,
+  setHltb: setHltbMock,
+  setHltbEntryById: setHltbEntryByIdMock,
+  setHltbLibrarySnapshot: setHltbLibrarySnapshotMock,
+  setHltbMapping: setHltbMappingMock,
+}))
+
+vi.mock('@/lib/hltb/client', () => ({
+  fetchById: fetchByIdMock,
+  fetchSteamImport: fetchSteamImportMock,
+  searchByName: searchByNameMock,
+}))
+
+beforeEach(() => {
+  vi.useRealTimers()
+  fetchByIdMock.mockReset()
+  fetchSteamImportMock.mockReset()
+  getHltbEntryByIdMock.mockReset()
+  getHltbLibrarySnapshotMock.mockReset()
+  getHltbMappingMock.mockReset()
+  getHltbMock.mockReset()
+  getHltbOverrideNameMock.mockReset()
+  searchByNameMock.mockReset()
+  setHltbEntryByIdMock.mockReset()
+  setHltbLibrarySnapshotMock.mockReset()
+  setHltbMappingMock.mockReset()
+  setHltbMock.mockReset()
+  warnMock.mockReset()
+  vi.spyOn(console, 'warn').mockImplementation(warnMock)
+
+  getHltbMappingMock.mockResolvedValue(null)
+  getHltbLibrarySnapshotMock.mockResolvedValue({
+    value: { appids: [1, 2], refreshedAt: new Date().toISOString() },
+    cachedAt: new Date().toISOString(),
+  })
+  getHltbEntryByIdMock.mockResolvedValue(null)
+  getHltbOverrideNameMock.mockResolvedValue(null)
+  getHltbMock.mockResolvedValue(null)
+  searchByNameMock.mockResolvedValue(null)
+  setHltbEntryByIdMock.mockResolvedValue(undefined)
+  setHltbLibrarySnapshotMock.mockResolvedValue(undefined)
+  setHltbMappingMock.mockResolvedValue(undefined)
+  setHltbMock.mockResolvedValue(undefined)
+})
+
+import { resolveHltbForGame, resolveHltbForLibrary } from '@/lib/hltb/resolve'
+
+const games: SteamGame[] = [
+  { appid: 1, name: 'Portal', playtimeMinutes: 60, headerImageUrl: 'portal.jpg' },
+  { appid: 2, name: 'Hades', playtimeMinutes: 120, headerImageUrl: 'hades.jpg' },
+]
+
+const portalEntry: HltbEntry = {
+  mainHours: 3,
+  mainExtraHours: 5,
+  completionistHours: 8,
+  hltbId: 7230,
+  matchedName: 'Portal',
+}
+
+describe('resolveHltbForLibrary', () => {
+  it('skips Steam import when all appids already have mappings', async () => {
+    getHltbMappingMock
+      .mockResolvedValueOnce({
+        value: {
+          steamAppId: 1,
+          hltbId: 7230,
+          hltbName: 'Portal',
+          discoveredFromSteamId: 'steam-1',
+          discoveredAt: 'now',
+        },
+        cachedAt: 'now',
+      })
+      .mockResolvedValueOnce({
+        value: {
+          steamAppId: 2,
+          hltbId: 111,
+          hltbName: 'Hades',
+          discoveredFromSteamId: 'steam-1',
+          discoveredAt: 'now',
+        },
+        cachedAt: 'now',
+      })
+    fetchByIdMock.mockResolvedValue(portalEntry)
+
+    await resolveHltbForLibrary({ steamId: 'steam-1', games, force: false })
+
+    expect(fetchSteamImportMock).not.toHaveBeenCalled()
+  })
+
+  it('imports Steam mappings when snapshot is missing, writes mappings, then rechecks', async () => {
+    getHltbLibrarySnapshotMock.mockResolvedValueOnce(null)
+    fetchSteamImportMock.mockResolvedValueOnce([
+      { steamAppId: 1, hltbId: 7230, hltbName: 'Portal' },
+    ])
+    getHltbMappingMock
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        value: {
+          steamAppId: 1,
+          hltbId: 7230,
+          hltbName: 'Portal',
+          discoveredFromSteamId: 'steam-1',
+          discoveredAt: 'now',
+        },
+        cachedAt: 'now',
+      })
+    fetchByIdMock.mockResolvedValue(portalEntry)
+
+    const result = await resolveHltbForLibrary({ steamId: 'steam-1', games: [games[0]], force: false })
+
+    expect(fetchSteamImportMock).toHaveBeenCalledWith('steam-1')
+    expect(setHltbMappingMock).toHaveBeenCalledWith(
+      expect.objectContaining({ steamAppId: 1, hltbId: 7230, hltbName: 'Portal' }),
+    )
+    expect(setHltbLibrarySnapshotMock).toHaveBeenCalledWith('steam-1', [1])
+    expect(result.meta[1]).toEqual({ source: 'steam-import', steamName: 'Portal', overrideName: null })
+  })
+
+  it('uses override name before Steam name when no mapping exists', async () => {
+    getHltbOverrideNameMock.mockResolvedValueOnce({
+      value: { appid: 1, searchName: 'Portal 2007', updatedAt: new Date().toISOString() },
+      cachedAt: new Date().toISOString(),
+    })
+    searchByNameMock.mockResolvedValueOnce(portalEntry)
+
+    const result = await resolveHltbForGame({ steamId: 'steam-1', game: games[0], force: false })
+
+    expect(searchByNameMock).toHaveBeenCalledWith('Portal 2007')
+    expect(result).toEqual({
+      entry: portalEntry,
+      cachedAt: null,
+      meta: { source: 'override-name', steamName: 'Portal', overrideName: 'Portal 2007' },
+    })
+  })
+
+  it('force bypasses entry and name cache reads but still writes cache', async () => {
+    getHltbMappingMock.mockResolvedValueOnce({
+      value: {
+        steamAppId: 1,
+        hltbId: 7230,
+        hltbName: 'Portal',
+        discoveredFromSteamId: 'steam-1',
+        discoveredAt: 'now',
+      },
+      cachedAt: 'now',
+    })
+    fetchByIdMock.mockResolvedValueOnce(portalEntry)
+
+    await resolveHltbForGame({ steamId: 'steam-1', game: games[0], force: true })
+
+    expect(getHltbEntryByIdMock).not.toHaveBeenCalled()
+    expect(setHltbEntryByIdMock).toHaveBeenCalledWith(7230, portalEntry)
+
+    getHltbMappingMock.mockResolvedValueOnce(null)
+    searchByNameMock.mockResolvedValueOnce(portalEntry)
+
+    await resolveHltbForGame({ steamId: 'steam-1', game: games[0], force: true })
+
+    expect(getHltbMock).not.toHaveBeenCalled()
+    expect(setHltbMock).toHaveBeenCalledWith('Portal', portalEntry)
+  })
+
+  it('global mapping ignores dormant override and treats detail errors as misses', async () => {
+    getHltbMappingMock.mockResolvedValueOnce({
+      value: {
+        steamAppId: 1,
+        hltbId: 7230,
+        hltbName: 'Portal',
+        discoveredFromSteamId: 'steam-1',
+        discoveredAt: 'now',
+      },
+      cachedAt: 'now',
+    })
+    getHltbOverrideNameMock.mockResolvedValueOnce({
+      value: { appid: 1, searchName: 'Wrong', updatedAt: 'now' },
+      cachedAt: 'now',
+    })
+    fetchByIdMock.mockResolvedValueOnce(new HltbRateLimitError({ retryAfterMs: 10_000 }))
+
+    const result = await resolveHltbForGame({ steamId: 'steam-1', game: games[0], force: false })
+
+    expect(getHltbOverrideNameMock).not.toHaveBeenCalled()
+    expect(result.entry).toBeNull()
+    expect(result.meta).toEqual({ source: 'steam-import', steamName: 'Portal', overrideName: null })
+    expect(warnMock).toHaveBeenCalled()
+  })
+
+  it('logs KV failures and returns source none on fallback miss', async () => {
+    getHltbMock.mockResolvedValueOnce(new KvError({ op: 'get', key: 'hltb:v2:portal' }))
+    searchByNameMock.mockResolvedValueOnce(null)
+
+    const result = await resolveHltbForGame({ steamId: 'steam-1', game: games[0], force: false })
+
+    expect(result).toEqual({
+      entry: null,
+      cachedAt: null,
+      meta: { source: 'none', steamName: 'Portal', overrideName: null },
+    })
+    expect(warnMock).toHaveBeenCalled()
+  })
+})
