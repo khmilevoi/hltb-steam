@@ -30,9 +30,9 @@ describe('useLibraryColumns', () => {
   it('makes direct mapped rows readonly and fallback rows editable', () => {
     const { result } = renderHook(() => useLibraryColumns(false))
     const columns = result.current
-    const searchColumn = columns.find((column) => column.key === 'hltbSearchName')
+    const nameColumn = columns.find((column) => column.key === 'name')
 
-    const editable = searchColumn?.editable
+    const editable = nameColumn?.editable
     expect(typeof editable).toBe('function')
     if (typeof editable !== 'function') return
 
@@ -46,8 +46,9 @@ describe('useLibraryColumns', () => {
     })).toBe(true)
   })
 
-  it('includes the HLTB Search column', () => {
+  it('exposes the HLTB-search editor on the name column', () => {
     const { result } = renderHook(() => useLibraryColumns(false))
-    expect(result.current.some((column) => column.key === 'hltbSearchName')).toBe(true)
+    const nameColumn = result.current.find((column) => column.key === 'name')
+    expect(typeof nameColumn?.renderEditCell).toBe('function')
   })
 })
