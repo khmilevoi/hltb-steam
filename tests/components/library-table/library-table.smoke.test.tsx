@@ -28,7 +28,7 @@ describe('useLibraryColumns', () => {
   }
 
   it('makes direct mapped rows readonly and fallback rows editable', () => {
-    const { result } = renderHook(() => useLibraryColumns(false))
+    const { result } = renderHook(() => useLibraryColumns(false, { current: null }))
     const columns = result.current
     const nameColumn = columns.find((column) => column.key === 'name')
 
@@ -47,7 +47,7 @@ describe('useLibraryColumns', () => {
   })
 
   it('exposes the HLTB-search editor on the name column', () => {
-    const { result } = renderHook(() => useLibraryColumns(false))
+    const { result } = renderHook(() => useLibraryColumns(false, { current: null }))
     const nameColumn = result.current.find((column) => column.key === 'name')
     expect(typeof nameColumn?.renderEditCell).toBe('function')
   })

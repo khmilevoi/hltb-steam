@@ -1,6 +1,6 @@
 'use client'
 
-import { Loader2, RotateCcw } from 'lucide-react'
+import { Loader2, Pencil, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { getHltbSearchName } from '@/lib/hltb/meta'
 import type { HltbMeta } from '@/types/game'
@@ -9,11 +9,13 @@ export function HltbSearchNameCell({
   matchedName,
   meta,
   onReset,
+  onEdit,
   isSaving,
 }: {
   meta: HltbMeta | null
   matchedName: string | null
   onReset?: () => void
+  onEdit?: () => void
   isSaving?: boolean
 }) {
   if (!meta) return <span className="text-muted-foreground">--</span>
@@ -30,17 +32,35 @@ export function HltbSearchNameCell({
           className="text-muted-foreground size-3.5 shrink-0 animate-spin"
           aria-hidden="true"
         />
-      ) : meta.overrideName !== null && onReset ? (
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          onClick={onReset}
-          aria-label="Reset HLTB search name"
-        >
-          <RotateCcw className="size-3.5" aria-hidden="true" />
-        </Button>
-      ) : null}
+      ) : (
+        <>
+          {meta.overrideName !== null && onReset ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={onReset}
+              aria-label="Reset HLTB search name"
+            >
+              <RotateCcw className="size-3.5" aria-hidden="true" />
+            </Button>
+          ) : null}
+          {onEdit ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={(e) => {
+                e.stopPropagation()
+                onEdit()
+              }}
+              aria-label="Edit HLTB search name"
+            >
+              <Pencil className="size-3.5" aria-hidden="true" />
+            </Button>
+          ) : null}
+        </>
+      )}
     </span>
   )
 }

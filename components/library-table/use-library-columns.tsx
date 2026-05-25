@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import type { Column, RenderHeaderCellProps } from 'react-data-grid'
+import type { Column, DataGridHandle, RenderHeaderCellProps } from 'react-data-grid'
 import type { GameRow } from '@/types/game'
 import { GameCoverCell } from './cells/game-cover-cell'
 import { HltbCell } from './cells/hltb-cell'
@@ -24,6 +24,7 @@ function renderHeaderCell(name: string) {
 
 export function useLibraryColumns(
   hltbLoading: boolean,
+  gridRef: React.RefObject<DataGridHandle | null>,
   savingAppids?: ReadonlySet<number>,
   onHltbSearchNameCommit?: (row: GameRow, searchName: string | null) => void | Promise<void>,
 ): readonly Column<GameRow>[] {
@@ -43,12 +44,17 @@ export function useLibraryColumns(
         width: 220,
         editable: (row) => row.hltbMeta?.source !== 'steam-import',
         renderHeaderCell: renderHeaderCell('Name'),
-        renderCell: ({ row }) => (
+        renderCell: ({ row, column, rowIdx }) => (
           <HltbSearchNameCell
             meta={row.hltbMeta}
             matchedName={row.hltb?.matchedName ?? row.name}
             isSaving={savingAppids?.has(row.appid) ?? false}
             onReset={() => onHltbSearchNameCommit?.(row, null)}
+            onEdit={
+              row.hltbMeta?.source !== 'steam-import'
+                ? () => gridRef.current?.selectCell({ idx: column.idx, rowIdx }, { enableEditor: true })
+                : undefined
+            }
           />
         ),
         renderEditCell: (props) => (
@@ -105,6 +111,6 @@ export function useLibraryColumns(
         ),
       },
     ],
-    [hltbLoading, savingAppids, onHltbSearchNameCommit],
+    [hltbLoading, gridRef, savingAppids, onHltbSearchNameCommit],
   )
 }

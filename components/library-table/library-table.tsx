@@ -1,7 +1,8 @@
 'use client'
 
+import { useRef } from 'react'
 import { SearchX } from 'lucide-react'
-import { DataGrid, type SortColumn } from 'react-data-grid'
+import { DataGrid, type DataGridHandle, type SortColumn } from 'react-data-grid'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import type { GameRow } from '@/types/game'
 import { useLibraryColumns } from './use-library-columns'
@@ -16,7 +17,8 @@ type Props = {
 }
 
 export function LibraryTable({ rows, hltbLoading, savingAppids, onHltbSearchNameCommit }: Props) {
-  const columns = useLibraryColumns(hltbLoading, savingAppids, onHltbSearchNameCommit)
+  const gridRef = useRef<DataGridHandle>(null)
+  const columns = useLibraryColumns(hltbLoading, gridRef, savingAppids, onHltbSearchNameCommit)
   const [sortColumns, setSortColumns] = usePersistedSortColumns()
   const sortedRows = useSortedRows(rows, sortColumns)
 
@@ -24,6 +26,7 @@ export function LibraryTable({ rows, hltbLoading, savingAppids, onHltbSearchName
     <TooltipProvider delayDuration={200}>
       <div className="relative h-[calc(100vh-280px)] min-h-[320px] overflow-hidden rounded-md border">
         <DataGrid
+          ref={gridRef}
           className="rdg-light"
           columns={columns}
           rows={sortedRows}
