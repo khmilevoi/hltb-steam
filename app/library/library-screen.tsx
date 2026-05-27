@@ -78,7 +78,7 @@ export function LibraryScreen() {
       const value = row.hltb?.mainHours
       if (typeof value === 'number' && value > max) max = value
     }
-    return max
+    return Math.ceil(max)
   }, [rows])
 
   const [filters, setFilters] = useState<LibraryFiltersValue>(readStoredFilters)
