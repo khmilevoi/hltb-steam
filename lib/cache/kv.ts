@@ -35,7 +35,7 @@ function getRedis(): Redis {
 }
 
 function isVercel(): boolean {
-  return process.env.VERCEL === '1'
+  return String(process.env.VERCEL) === '1'
 }
 
 function getStorage(): StorageAdapter {
