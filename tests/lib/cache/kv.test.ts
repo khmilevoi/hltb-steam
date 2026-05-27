@@ -2,23 +2,23 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { KvError } from '@/lib/errors'
 
 const {
-  getCacheMock,
   getItemMock,
   getKeysMock,
-  runtimeCacheDeleteMock,
-  runtimeCacheGetMock,
-  runtimeCacheSetMock,
   removeItemMock,
   setItemMock,
+  redisGetMock,
+  redisSetMock,
+  redisDelMock,
+  redisKeysMock,
 } = vi.hoisted(() => ({
-  getCacheMock: vi.fn(),
   getItemMock: vi.fn(),
   getKeysMock: vi.fn(),
-  runtimeCacheDeleteMock: vi.fn(),
-  runtimeCacheGetMock: vi.fn(),
-  runtimeCacheSetMock: vi.fn(),
   setItemMock: vi.fn(),
   removeItemMock: vi.fn(),
+  redisGetMock: vi.fn(),
+  redisSetMock: vi.fn(),
+  redisDelMock: vi.fn(),
+  redisKeysMock: vi.fn(),
 }))
 
 vi.mock('unstorage', () => ({
@@ -31,28 +31,31 @@ vi.mock('unstorage', () => ({
 }))
 
 vi.mock('unstorage/drivers/fs', () => ({ default: () => ({}) }))
-vi.mock('@vercel/functions', () => ({ getCache: getCacheMock }))
+vi.mock('@upstash/redis', () => ({
+  Redis: class {
+    get = redisGetMock
+    set = redisSetMock
+    del = redisDelMock
+    keys = redisKeysMock
+  },
+}))
 
 beforeEach(() => {
   delete process.env.VERCEL
-  getCacheMock.mockReset()
   getItemMock.mockReset()
   getKeysMock.mockReset()
-  runtimeCacheDeleteMock.mockReset()
-  runtimeCacheGetMock.mockReset()
-  runtimeCacheSetMock.mockReset()
   setItemMock.mockReset()
   removeItemMock.mockReset()
-  getCacheMock.mockReturnValue({
-    delete: runtimeCacheDeleteMock,
-    get: runtimeCacheGetMock,
-    set: runtimeCacheSetMock,
-  })
+  redisGetMock.mockReset()
+  redisSetMock.mockReset()
+  redisDelMock.mockReset()
+  redisKeysMock.mockReset()
   setItemMock.mockResolvedValue(undefined)
   removeItemMock.mockResolvedValue(undefined)
-  runtimeCacheDeleteMock.mockResolvedValue(undefined)
-  runtimeCacheGetMock.mockResolvedValue(null)
-  runtimeCacheSetMock.mockResolvedValue(undefined)
+  redisGetMock.mockResolvedValue(null)
+  redisSetMock.mockResolvedValue('OK')
+  redisDelMock.mockResolvedValue(1)
+  redisKeysMock.mockResolvedValue([])
 })
 
 import {
@@ -114,17 +117,15 @@ describe('local cache (unstorage fs)', () => {
     expect(result).toBeInstanceOf(KvError)
   })
 
-  it('uses Vercel Runtime Cache instead of local fs storage on Vercel', async () => {
+  it('uses Upstash Redis instead of local fs storage on Vercel', async () => {
     process.env.VERCEL = '1'
 
     const result = await setLibrary('xx', [])
 
     expect(result).toBeUndefined()
-    expect(getCacheMock).toHaveBeenCalledWith({ namespace: 'hltb-steam' })
-    expect(runtimeCacheSetMock).toHaveBeenCalledWith(
+    expect(redisSetMock).toHaveBeenCalledWith(
       'library:xx',
       expect.objectContaining({ value: [], cachedAt: expect.any(String) }),
-      { name: 'library:xx' },
     )
     expect(setItemMock).not.toHaveBeenCalled()
   })

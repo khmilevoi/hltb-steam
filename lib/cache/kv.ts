@@ -1,4 +1,4 @@
-import { getCache } from '@vercel/functions'
+import { Redis } from '@upstash/redis'
 import { createStorage } from 'unstorage'
 import fsDriver from 'unstorage/drivers/fs'
 import { KvError } from '@/lib/errors'
@@ -11,7 +11,7 @@ import type {
   SteamGame,
 } from '@/types/game'
 
-const storage = createStorage({
+const fsStorage = createStorage({
   driver: fsDriver({ base: './.cache' }),
 })
 
@@ -22,18 +22,31 @@ type StorageAdapter = {
   setItem: (key: string, value: unknown) => Promise<void>
 }
 
-function isRuntimeCache(): boolean {
+let _redis: Redis | null = null
+
+function getRedis(): Redis {
+  if (!_redis) {
+    _redis = new Redis({
+      url: process.env.KV_REST_API_URL!,
+      token: process.env.KV_REST_API_TOKEN!,
+    })
+  }
+  return _redis
+}
+
+function isVercel(): boolean {
   return process.env.VERCEL === '1'
 }
 
 function getStorage(): StorageAdapter {
-  if (!isRuntimeCache()) return storage as StorageAdapter
+  if (!isVercel()) return fsStorage
 
-  const cache = getCache({ namespace: 'hltb-steam' })
+  const redis = getRedis()
   return {
-    getItem: (key) => cache.get(key),
-    removeItem: (key) => cache.delete(key),
-    setItem: (key, value) => cache.set(key, value, { name: key }),
+    getItem: (key) => redis.get(key),
+    getKeys: (base) => redis.keys(`${base}*`),
+    removeItem: async (key) => { await redis.del(key) },
+    setItem: async (key, value) => { await redis.set(key, value) },
   }
 }
 
