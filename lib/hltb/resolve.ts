@@ -1,5 +1,6 @@
 import * as kv from '@/lib/cache/kv'
 import * as hltb from '@/lib/hltb/client'
+import { noSyncNeeded } from '@/lib/hltb/sync-meta'
 import type {
   Cached,
   HltbEntry,
@@ -219,5 +220,5 @@ export async function resolveHltbForLibrary({
     meta[game.appid] = result.meta
   }
 
-  return { entries, cachedAt, meta }
+  return { entries, cachedAt, meta, sync: noSyncNeeded(games.length) }
 }

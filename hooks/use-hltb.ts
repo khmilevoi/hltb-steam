@@ -2,6 +2,7 @@
 
 import { useQuery, type QueryClient } from '@tanstack/react-query'
 import { fetchHltb, fetchHltbGame, putHltbOverrideName } from '@/lib/client-fetch'
+import { noSyncNeeded } from '@/lib/hltb/sync-meta'
 import type { HltbResponse, HltbSingleResponse } from '@/types/game'
 
 export const HLTB_QUERY_KEY = ['hltb'] as const
@@ -26,6 +27,7 @@ export function mergeSingleHltbResult(
     entries: { ...(old?.entries ?? {}), [appid]: single.entry },
     cachedAt: { ...(old?.cachedAt ?? {}), [appid]: single.cachedAt },
     meta: { ...(old?.meta ?? {}), [appid]: single.meta },
+    sync: old?.sync ?? noSyncNeeded(1),
   }
 }
 

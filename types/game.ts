@@ -21,10 +21,40 @@ export type HltbMeta = {
   overrideName: string | null
 }
 
+export type HltbSyncReason =
+  | 'none'
+  | 'library-cache-missing'
+  | 'missing-hltb-data'
+  | 'stale-hltb-data'
+
+export type HltbSyncMeta = {
+  needed: boolean
+  reason: HltbSyncReason
+  missingAppids: number[]
+  staleAppids: number[]
+  cachedCount: number
+  totalCount: number
+}
+
+export type HltbStateResponse = {
+  revision: string
+  updatedAt: string
+}
+
+export type HltbUserState = HltbStateResponse
+
+export type HltbFallbackResult = {
+  appid: number
+  searchName: string
+  entry: HltbEntry | null
+  source: 'override-name' | 'steam-name' | 'none'
+}
+
 export type HltbResponse = {
   entries: Record<number, HltbEntry | null>
   cachedAt: Record<number, string | null>
   meta: Record<number, HltbMeta>
+  sync: HltbSyncMeta
 }
 
 export type HltbSingleResponse = {
