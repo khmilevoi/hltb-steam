@@ -32,7 +32,17 @@ describe('HLTB search name cells', () => {
     expect(getHltbSearchName(steamMeta)).toBe('Portal')
   })
 
-  it('shows placeholder when metadata is missing', () => {
+  it('falls back to the available name when metadata is missing', () => {
+    const onEdit = vi.fn()
+
+    render(<HltbSearchNameCell meta={null} matchedName="Portal" onEdit={onEdit} />)
+
+    expect(screen.getByText('Portal')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Edit HLTB search name' }))
+    expect(onEdit).toHaveBeenCalledOnce()
+  })
+
+  it('shows placeholder when metadata and fallback name are missing', () => {
     render(<HltbSearchNameCell meta={null} matchedName={null} />)
     expect(screen.getByText('--')).toBeTruthy()
   })

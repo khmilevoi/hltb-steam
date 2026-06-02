@@ -18,7 +18,34 @@ export function HltbSearchNameCell({
   onEdit?: () => void
   isSaving?: boolean
 }) {
-  if (!meta) return <span className="text-muted-foreground">--</span>
+  if (!meta) {
+    if (!matchedName) return <span className="text-muted-foreground">--</span>
+
+    return (
+      <span className="flex min-w-0 items-center gap-1">
+        <span className="truncate">{matchedName}</span>
+        {isSaving ? (
+          <Loader2
+            className="text-muted-foreground size-3.5 shrink-0 animate-spin"
+            aria-hidden="true"
+          />
+        ) : onEdit ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={(e) => {
+              e.stopPropagation()
+              onEdit()
+            }}
+            aria-label="Edit HLTB search name"
+          >
+            <Pencil className="size-3.5" aria-hidden="true" />
+          </Button>
+        ) : null}
+      </span>
+    )
+  }
 
   if (meta.source === 'steam-import') {
     return <span className="truncate">{matchedName ?? meta.steamName}</span>
