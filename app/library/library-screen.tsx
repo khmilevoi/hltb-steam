@@ -10,7 +10,9 @@ import { RefreshControls } from '@/components/refresh-controls'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
-  HLTB_QUERY_KEY,
+  HLTB_CACHED_QUERY_KEY,
+  HLTB_STATE_QUERY_KEY,
+  HLTB_SYNC_QUERY_KEY,
   refreshHltb,
   saveHltbOverrideAndRefresh,
   useHltb,
@@ -144,7 +146,9 @@ export function LibraryScreen() {
         onRefreshLibrary={async () => {
           try {
             await refreshLibrary(queryClient)
-            await queryClient.invalidateQueries({ queryKey: HLTB_QUERY_KEY })
+            await queryClient.invalidateQueries({ queryKey: HLTB_STATE_QUERY_KEY })
+            await queryClient.invalidateQueries({ queryKey: HLTB_CACHED_QUERY_KEY })
+            await queryClient.invalidateQueries({ queryKey: HLTB_SYNC_QUERY_KEY })
           } catch (error) {
             toast.error(`Refresh library failed: ${(error as Error).message}`)
           }

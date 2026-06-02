@@ -1,5 +1,5 @@
 import { HltbApiError, LibraryFetchError } from '@/lib/errors'
-import type { HltbResponse, HltbSingleResponse, SteamGame } from '@/types/game'
+import type { HltbResponse, HltbSingleResponse, HltbStateResponse, SteamGame } from '@/types/game'
 
 export async function fetchLibrary({ force }: { force: boolean }) {
   const url = `/api/library${force ? '?force=1' : ''}`
@@ -16,8 +16,8 @@ export async function fetchLibrary({ force }: { force: boolean }) {
   return (await res.json()) as { games: SteamGame[]; cachedAt: string | null }
 }
 
-export async function fetchHltb({ force }: { force: boolean }) {
-  const res = await fetch(`/api/hltb${force ? '?force=1' : ''}`).catch(
+async function readHltbJson<T>(url: string): Promise<T> {
+  const res = await fetch(url).catch(
     (error) => new HltbApiError({ status: 0, code: 'network', cause: error }),
   )
   if (res instanceof Error) throw res
@@ -27,7 +27,19 @@ export async function fetchHltb({ force }: { force: boolean }) {
     throw new HltbApiError({ status: res.status, code: body?.error ?? 'unknown' })
   }
 
-  return (await res.json()) as HltbResponse
+  return (await res.json()) as T
+}
+
+export function fetchHltbState() {
+  return readHltbJson<HltbStateResponse>('/api/hltb/state')
+}
+
+export function fetchHltbCached() {
+  return readHltbJson<HltbResponse>('/api/hltb/cached')
+}
+
+export function fetchHltb({ force }: { force: boolean }) {
+  return readHltbJson<HltbResponse>(`/api/hltb${force ? '?force=1' : ''}`)
 }
 
 export async function fetchHltbGame({ appid }: { appid: number }) {
