@@ -1,6 +1,6 @@
 import * as kv from '@/lib/cache/kv'
 import * as hltb from '@/lib/hltb/client'
-import { noSyncNeeded } from '@/lib/hltb/sync-meta'
+import { cachedSyncMeta, noSyncNeeded } from '@/lib/hltb/sync-meta'
 import type {
   Cached,
   HltbEntry,
@@ -12,6 +12,9 @@ import type {
 } from '@/types/game'
 
 type MappingMap = Map<number, HltbSteamMapping>
+type ResolvedHltbGame = HltbSingleResponse & {
+  final: boolean
+}
 
 function warn(message: string, error: Error) {
   console.warn(message, error.message)
@@ -102,7 +105,7 @@ async function resolveMappedGame({
   game: SteamGame
   mapping: HltbSteamMapping
   force: boolean
-}): Promise<HltbSingleResponse> {
+}): Promise<ResolvedHltbGame> {
   const meta: HltbMeta = {
     source: 'steam-import',
     steamName: game.name,
@@ -114,34 +117,71 @@ async function resolveMappedGame({
     if (cached instanceof Error) {
       warn(`KV HLTB id read failed for ${mapping.hltbId}:`, cached)
     } else if (cached !== null) {
-      return { entry: cached.value, cachedAt: cached.cachedAt, meta }
+      return { entry: cached.value, cachedAt: cached.cachedAt, meta, final: true }
     }
   }
 
   const entry = await hltb.fetchById(mapping.hltbId)
   if (entry instanceof Error) {
     console.warn(`HLTB id lookup failed for ${mapping.hltbId}:`, entry.message)
-    return { entry: null, cachedAt: null, meta }
+    return { entry: null, cachedAt: null, meta, final: false }
   }
 
   const writeResult = await kv.setHltbEntryById(mapping.hltbId, entry)
   if (writeResult instanceof Error) warn(`KV HLTB id write failed for ${mapping.hltbId}:`, writeResult)
-  return { entry, cachedAt: null, meta }
+  return { entry, cachedAt: null, meta, final: true }
+}
+
+async function readFallbackResult({
+  force,
+  game,
+  searchName,
+  steamId,
+}: {
+  steamId: string
+  game: SteamGame
+  searchName: string
+  force: boolean
+}) {
+  if (force) return null
+  const cached = await kv.getHltbFallbackResult(steamId, game.appid)
+  if (cached instanceof Error) {
+    warn(`KV fallback read failed for ${game.appid}:`, cached)
+    return null
+  }
+  if (cached === null) return null
+  if (cached.value.searchName !== searchName) return null
+  return cached
 }
 
 async function resolveFallbackGame({
+  force,
   game,
   steamId,
 }: {
   steamId: string
   game: SteamGame
-}): Promise<HltbSingleResponse> {
+  force: boolean
+}): Promise<ResolvedHltbGame> {
   const override = await kv.getHltbOverrideName(steamId, game.appid)
   if (override instanceof Error) warn(`KV override read failed for ${game.appid}:`, override)
 
   const overrideName = override instanceof Error ? null : (override?.value.searchName ?? null)
   const searchName = overrideName ?? game.name
   const source = overrideName ? 'override-name' : 'steam-name'
+  const cachedFallback = await readFallbackResult({ steamId, game, searchName, force })
+  if (cachedFallback !== null) {
+    return {
+      entry: cachedFallback.value.entry,
+      cachedAt: cachedFallback.cachedAt,
+      meta: {
+        source: cachedFallback.value.entry === null ? 'none' : cachedFallback.value.source,
+        steamName: game.name,
+        overrideName,
+      },
+      final: true,
+    }
+  }
 
   const entry = await hltb.searchByName(searchName)
   if (entry instanceof Error) {
@@ -149,9 +189,18 @@ async function resolveFallbackGame({
     return {
       entry: null,
       cachedAt: null,
-      meta: { source: 'none', steamName: game.name, overrideName },
+      meta: { source, steamName: game.name, overrideName },
+      final: false,
     }
   }
+
+  const writeResult = await kv.setHltbFallbackResult(steamId, {
+    appid: game.appid,
+    searchName,
+    entry,
+    source: entry === null ? 'none' : source,
+  })
+  if (writeResult instanceof Error) warn(`KV fallback write failed for ${game.appid}:`, writeResult)
 
   return {
     entry,
@@ -161,6 +210,7 @@ async function resolveFallbackGame({
       steamName: game.name,
       overrideName,
     },
+    final: true,
   }
 }
 
@@ -176,7 +226,7 @@ async function resolveGameWithMapping({
   mapping: HltbSteamMapping | null
 }) {
   if (mapping) return resolveMappedGame({ game, mapping, force })
-  return resolveFallbackGame({ steamId, game })
+  return resolveFallbackGame({ steamId, game, force })
 }
 
 export async function resolveHltbForGame({
@@ -189,7 +239,8 @@ export async function resolveHltbForGame({
   force: boolean
 }): Promise<HltbSingleResponse> {
   const mapping = await readMapping(game.appid)
-  return resolveGameWithMapping({ steamId, game, force, mapping })
+  const { final: _final, ...result } = await resolveGameWithMapping({ steamId, game, force, mapping })
+  return result
 }
 
 export async function resolveHltbForLibrary({
@@ -207,6 +258,7 @@ export async function resolveHltbForLibrary({
   const entries: Record<number, HltbEntry | null> = {}
   const cachedAt: Record<number, string | null> = {}
   const meta: Record<number, HltbMeta> = {}
+  const missingAppids: number[] = []
 
   for (const game of games) {
     const result = await resolveGameWithMapping({
@@ -218,7 +270,21 @@ export async function resolveHltbForLibrary({
     entries[game.appid] = result.entry
     cachedAt[game.appid] = result.cachedAt
     meta[game.appid] = result.meta
+    if (!result.final) missingAppids.push(game.appid)
   }
 
-  return { entries, cachedAt, meta, sync: noSyncNeeded(games.length) }
+  return {
+    entries,
+    cachedAt,
+    meta,
+    sync:
+      missingAppids.length === 0
+        ? noSyncNeeded(games.length)
+        : cachedSyncMeta({
+            cachedCount: games.length - missingAppids.length,
+            missingAppids,
+            staleAppids: [],
+            totalCount: games.length,
+          }),
+  }
 }

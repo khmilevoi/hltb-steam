@@ -1,5 +1,6 @@
 import * as errore from 'errore'
 import { auth } from '@/auth'
+import * as kv from '@/lib/cache/kv'
 import { json } from '@/lib/http'
 import { resolveHltbForLibrary } from '@/lib/hltb/resolve'
 import { loadUserLibrary } from '@/lib/library/server'
@@ -22,6 +23,9 @@ export async function GET(req: Request) {
     games: library.games,
     force,
   })
+
+  const state = await kv.touchHltbUserState(steamId)
+  if (state instanceof Error) return json(500, { error: 'internal' })
 
   return json(200, result)
 }

@@ -51,5 +51,8 @@ export async function PUT(
       : await kv.setHltbOverrideName(steamId, appid, searchName)
 
   if (result instanceof Error) return json(500, { error: 'internal' })
+  const state = await kv.touchHltbUserState(steamId)
+  if (state instanceof Error) return json(500, { error: 'internal' })
+
   return new Response(null, { status: 204 })
 }
