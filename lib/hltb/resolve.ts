@@ -239,8 +239,8 @@ export async function resolveHltbForGame({
   force: boolean
 }): Promise<HltbSingleResponse> {
   const mapping = await readMapping(game.appid)
-  const { final: _final, ...result } = await resolveGameWithMapping({ steamId, game, force, mapping })
-  return result
+  const result = await resolveGameWithMapping({ steamId, game, force, mapping })
+  return { entry: result.entry, cachedAt: result.cachedAt, meta: result.meta }
 }
 
 export async function resolveHltbForLibrary({
