@@ -144,6 +144,10 @@ export function getLibrary(steamId: string) {
   return get<SteamGame[]>(libraryKey(steamId), LIBRARY_TTL_MS)
 }
 
+export function getLibraryRaw(steamId: string) {
+  return getRaw<SteamGame[]>(libraryKey(steamId))
+}
+
 export function setLibrary(steamId: string, games: SteamGame[]) {
   return set(libraryKey(steamId), games)
 }

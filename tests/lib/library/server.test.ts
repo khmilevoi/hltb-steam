@@ -2,8 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { KvError, SteamUnavailableError } from '@/lib/errors'
 import type { SteamGame } from '@/types/game'
 
-const { getLibraryMock, getOwnedGamesMock, setLibraryMock, warnMock } = vi.hoisted(() => ({
+const { getLibraryMock, getLibraryRawMock, getOwnedGamesMock, setLibraryMock, warnMock } = vi.hoisted(() => ({
   getLibraryMock: vi.fn(),
+  getLibraryRawMock: vi.fn(),
   getOwnedGamesMock: vi.fn(),
   setLibraryMock: vi.fn(),
   warnMock: vi.fn(),
@@ -11,6 +12,7 @@ const { getLibraryMock, getOwnedGamesMock, setLibraryMock, warnMock } = vi.hoist
 
 vi.mock('@/lib/cache/kv', () => ({
   getLibrary: getLibraryMock,
+  getLibraryRaw: getLibraryRawMock,
   setLibrary: setLibraryMock,
 }))
 
@@ -20,6 +22,7 @@ vi.mock('@/lib/steam/client', () => ({
 
 beforeEach(() => {
   getLibraryMock.mockReset()
+  getLibraryRawMock.mockReset()
   getOwnedGamesMock.mockReset()
   setLibraryMock.mockReset()
   warnMock.mockReset()
@@ -50,6 +53,7 @@ describe('loadUserLibrary', () => {
 
   it('fetches Steam and writes cache on cache miss', async () => {
     getLibraryMock.mockResolvedValueOnce(null)
+    getLibraryRawMock.mockResolvedValueOnce(null)
     getOwnedGamesMock.mockResolvedValueOnce(games)
     setLibraryMock.mockResolvedValueOnce(undefined)
 
@@ -60,6 +64,22 @@ describe('loadUserLibrary', () => {
     expect(setLibraryMock).toHaveBeenCalledWith('steam-1', games)
   })
 
+  it('returns stale cached library before fetching Steam when fresh cache expired', async () => {
+    getLibraryMock.mockResolvedValueOnce(null)
+    getLibraryRawMock.mockResolvedValueOnce({
+      value: games,
+      cachedAt: '2026-05-24T00:00:00.000Z',
+    })
+
+    const result = await loadUserLibrary({ steamId: 'steam-1', force: false })
+
+    expect(result).toEqual({
+      games,
+      cachedAt: '2026-05-24T00:00:00.000Z',
+    })
+    expect(getOwnedGamesMock).not.toHaveBeenCalled()
+  })
+
   it('bypasses cache read when force is true', async () => {
     getOwnedGamesMock.mockResolvedValueOnce(games)
     setLibraryMock.mockResolvedValueOnce(undefined)
@@ -68,10 +88,12 @@ describe('loadUserLibrary', () => {
 
     expect(result).toEqual({ games, cachedAt: null })
     expect(getLibraryMock).not.toHaveBeenCalled()
+    expect(getLibraryRawMock).not.toHaveBeenCalled()
   })
 
   it('returns Steam errors as values', async () => {
     getLibraryMock.mockResolvedValueOnce(null)
+    getLibraryRawMock.mockResolvedValueOnce(null)
     const error = new SteamUnavailableError({ reason: 'down' })
     getOwnedGamesMock.mockResolvedValueOnce(error)
 
@@ -83,6 +105,7 @@ describe('loadUserLibrary', () => {
 
   it('logs and continues on KV read/write errors', async () => {
     getLibraryMock.mockResolvedValueOnce(new KvError({ op: 'get', key: 'library:steam-1' }))
+    getLibraryRawMock.mockResolvedValueOnce(null)
     getOwnedGamesMock.mockResolvedValueOnce(games)
     setLibraryMock.mockResolvedValueOnce(new KvError({ op: 'set', key: 'library:steam-1' }))
 

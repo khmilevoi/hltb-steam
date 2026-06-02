@@ -113,13 +113,17 @@ describe('resolveCachedHltbForLibrary', () => {
     })
   })
 
-  it('reports stale mappings or entries as stale', async () => {
+  it('keeps stale mapped entries visible while reporting stale sync', async () => {
     getHltbMappingRawMock.mockResolvedValueOnce({
       value: { steamAppId: 1, hltbId: 7230, hltbName: 'Portal' },
       cachedAt: stale,
     })
+    getHltbEntryByIdRawMock.mockResolvedValueOnce({ value: portalEntry, cachedAt: stale })
 
     let result = await resolveCachedHltbForLibrary({ steamId: 'steam-1', games })
+    expect(result.entries[1]).toEqual(portalEntry)
+    expect(result.cachedAt[1]).toBe(stale)
+    expect(result.meta[1]).toEqual({ source: 'steam-import', steamName: 'Portal', overrideName: null })
     expect(result.sync).toMatchObject({ needed: true, reason: 'stale-hltb-data', staleAppids: [1] })
 
     getHltbMappingRawMock.mockResolvedValueOnce({
@@ -129,6 +133,22 @@ describe('resolveCachedHltbForLibrary', () => {
     getHltbEntryByIdRawMock.mockResolvedValueOnce({ value: portalEntry, cachedAt: stale })
 
     result = await resolveCachedHltbForLibrary({ steamId: 'steam-1', games })
+    expect(result.entries[1]).toEqual(portalEntry)
+    expect(result.cachedAt[1]).toBe(stale)
+    expect(result.sync).toMatchObject({ needed: true, reason: 'stale-hltb-data', staleAppids: [1] })
+  })
+
+  it('keeps stale fallback entries visible while reporting stale sync', async () => {
+    getHltbFallbackResultRawMock.mockResolvedValueOnce({
+      value: { appid: 1, searchName: 'Portal', entry: portalEntry, source: 'steam-name' },
+      cachedAt: stale,
+    })
+
+    const result = await resolveCachedHltbForLibrary({ steamId: 'steam-1', games })
+
+    expect(result.entries[1]).toEqual(portalEntry)
+    expect(result.cachedAt[1]).toBe(stale)
+    expect(result.meta[1]).toEqual({ source: 'steam-name', steamName: 'Portal', overrideName: null })
     expect(result.sync).toMatchObject({ needed: true, reason: 'stale-hltb-data', staleAppids: [1] })
   })
 

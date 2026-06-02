@@ -16,7 +16,7 @@ export async function GET() {
   if (!session?.user?.steamId) return json(401, { error: 'unauthenticated' })
 
   const steamId = session.user.steamId
-  const library = await kv.getLibrary(steamId)
+  const library = await kv.getLibraryRaw(steamId)
   if (library instanceof Error) return json(500, { error: 'internal' })
   if (library === null) return json(200, emptyCachedResponse)
 

@@ -25,6 +25,13 @@ export async function loadUserLibrary({
     } else if (cached !== null) {
       return { games: cached.value, cachedAt: cached.cachedAt }
     }
+
+    const staleCached = await kv.getLibraryRaw(steamId)
+    if (staleCached instanceof Error) {
+      console.warn('KV stale read failed:', staleCached.message)
+    } else if (staleCached !== null) {
+      return { games: staleCached.value, cachedAt: staleCached.cachedAt }
+    }
   }
 
   const games = await steam.getOwnedGames(steamId)

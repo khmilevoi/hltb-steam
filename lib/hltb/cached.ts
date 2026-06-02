@@ -10,7 +10,7 @@ import type {
 } from '@/types/game'
 
 type CachedGameResult =
-  | { status: 'cached'; entry: HltbEntry | null; cachedAt: string; meta: HltbMeta }
+  | { status: 'cached'; entry: HltbEntry | null; cachedAt: string; meta: HltbMeta; stale: boolean }
   | { status: 'missing' | 'stale' }
 
 function isFresh(cachedAt: string) {
@@ -34,21 +34,21 @@ async function resolveCachedMappedGame(
   game: SteamGame,
   mapping: Cached<HltbSteamMapping>,
 ): Promise<CachedGameResult> {
-  if (!isFresh(mapping.cachedAt)) return { status: 'stale' }
-
   const entry = await kv.getHltbEntryByIdRaw(mapping.value.hltbId)
   if (entry instanceof Error) {
     warn(`KV HLTB id read failed for ${mapping.value.hltbId}:`, entry)
     return { status: 'missing' }
   }
-  if (entry === null) return { status: 'missing' }
-  if (!isFresh(entry.cachedAt)) return { status: 'stale' }
+  const mappingStale = !isFresh(mapping.cachedAt)
+  if (entry === null) return mappingStale ? { status: 'stale' } : { status: 'missing' }
+  const stale = mappingStale || !isFresh(entry.cachedAt)
 
   return {
     status: 'cached',
     entry: entry.value,
     cachedAt: entry.cachedAt,
     meta: { source: 'steam-import', steamName: game.name, overrideName: null },
+    stale,
   }
 }
 
@@ -68,8 +68,8 @@ async function resolveCachedFallbackGame({
     return { status: 'missing' }
   }
   if (fallback === null) return { status: 'missing' }
-  if (!isFresh(fallback.cachedAt)) return { status: 'stale' }
   if (fallback.value.searchName !== searchName) return { status: 'missing' }
+  const stale = !isFresh(fallback.cachedAt)
 
   return {
     status: 'cached',
@@ -80,6 +80,7 @@ async function resolveCachedFallbackGame({
       steamName: game.name,
       overrideName,
     },
+    stale,
   }
 }
 
@@ -114,6 +115,7 @@ export async function resolveCachedHltbForLibrary({
       cachedAt[game.appid] = result.cachedAt
       meta[game.appid] = result.meta
       cachedCount += 1
+      if (result.stale) staleAppids.push(game.appid)
     } else {
       entries[game.appid] = null
       cachedAt[game.appid] = null
