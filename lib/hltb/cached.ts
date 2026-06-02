@@ -1,3 +1,4 @@
+import pLimit from 'p-limit'
 import * as kv from '@/lib/cache/kv'
 import { cachedSyncMeta } from '@/lib/hltb/sync-meta'
 import type {
@@ -12,6 +13,8 @@ import type {
 type CachedGameResult =
   | { status: 'cached'; entry: HltbEntry | null; cachedAt: string; meta: HltbMeta; stale: boolean }
   | { status: 'missing' | 'stale' }
+
+const CACHED_LOOKUP_CONCURRENCY = 32
 
 function isFresh(cachedAt: string) {
   return !kv.isExpired(cachedAt, kv.HLTB_TTL_MS)
@@ -84,6 +87,24 @@ async function resolveCachedFallbackGame({
   }
 }
 
+async function resolveCachedGame({
+  game,
+  steamId,
+}: {
+  steamId: string
+  game: SteamGame
+}): Promise<CachedGameResult> {
+  const mapping = await kv.getHltbMappingRaw(game.appid)
+  return mapping instanceof Error
+    ? (() => {
+        warn(`KV mapping read failed for ${game.appid}:`, mapping)
+        return { status: 'missing' as const }
+      })()
+    : mapping
+      ? await resolveCachedMappedGame(game, mapping)
+      : await resolveCachedFallbackGame({ steamId, game })
+}
+
 export async function resolveCachedHltbForLibrary({
   games,
   steamId,
@@ -98,29 +119,28 @@ export async function resolveCachedHltbForLibrary({
   const staleAppids: number[] = []
   let cachedCount = 0
 
-  for (const game of games) {
-    const mapping = await kv.getHltbMappingRaw(game.appid)
-    const result =
-      mapping instanceof Error
-        ? (() => {
-            warn(`KV mapping read failed for ${game.appid}:`, mapping)
-            return { status: 'missing' as const }
-          })()
-        : mapping
-          ? await resolveCachedMappedGame(game, mapping)
-          : await resolveCachedFallbackGame({ steamId, game })
+  const limit = pLimit(CACHED_LOOKUP_CONCURRENCY)
+  const results = await Promise.all(
+    games.map((game) =>
+      limit(async () => ({
+        appid: game.appid,
+        result: await resolveCachedGame({ steamId, game }),
+      })),
+    ),
+  )
 
+  for (const { appid, result } of results) {
     if (result.status === 'cached') {
-      entries[game.appid] = result.entry
-      cachedAt[game.appid] = result.cachedAt
-      meta[game.appid] = result.meta
+      entries[appid] = result.entry
+      cachedAt[appid] = result.cachedAt
+      meta[appid] = result.meta
       cachedCount += 1
-      if (result.stale) staleAppids.push(game.appid)
+      if (result.stale) staleAppids.push(appid)
     } else {
-      entries[game.appid] = null
-      cachedAt[game.appid] = null
-      if (result.status === 'stale') staleAppids.push(game.appid)
-      else missingAppids.push(game.appid)
+      entries[appid] = null
+      cachedAt[appid] = null
+      if (result.status === 'stale') staleAppids.push(appid)
+      else missingAppids.push(appid)
     }
   }
 

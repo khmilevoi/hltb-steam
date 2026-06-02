@@ -48,6 +48,11 @@ const games: SteamGame[] = [
   { appid: 1, name: 'Portal', playtimeMinutes: 60, headerImageUrl: 'portal.jpg' },
 ]
 
+const twoGames: SteamGame[] = [
+  { appid: 1, name: 'Portal', playtimeMinutes: 60, headerImageUrl: 'portal.jpg' },
+  { appid: 2, name: 'Hades', playtimeMinutes: 120, headerImageUrl: 'hades.jpg' },
+]
+
 const portalEntry: HltbEntry = {
   mainHours: 3,
   mainExtraHours: 5,
@@ -60,6 +65,26 @@ const fresh = '2026-06-02T00:00:00.000Z'
 const stale = '2026-05-24T00:00:00.000Z'
 
 describe('resolveCachedHltbForLibrary', () => {
+  it('starts cached lookups for multiple games in parallel', async () => {
+    let resolveFirstMapping: (value: null) => void = () => {}
+    getHltbMappingRawMock.mockImplementation((appid: number) => {
+      if (appid === 1) {
+        return new Promise<null>((resolve) => {
+          resolveFirstMapping = resolve
+        })
+      }
+      return Promise.resolve(null)
+    })
+
+    const resultPromise = resolveCachedHltbForLibrary({ steamId: 'steam-1', games: twoGames })
+    await Promise.resolve()
+
+    expect(getHltbMappingRawMock).toHaveBeenCalledWith(2)
+
+    resolveFirstMapping(null)
+    await resultPromise
+  })
+
   it('returns mapped fresh cached entries without sync', async () => {
     getHltbMappingRawMock.mockResolvedValueOnce({
       value: { steamAppId: 1, hltbId: 7230, hltbName: 'Portal' },
