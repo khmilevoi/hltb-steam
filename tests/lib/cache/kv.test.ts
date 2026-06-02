@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { KvError } from '@/lib/errors'
 
 const {
@@ -58,19 +58,31 @@ beforeEach(() => {
   redisKeysMock.mockResolvedValue([])
 })
 
+afterEach(() => {
+  vi.useRealTimers()
+})
+
 import {
   deleteHltbOverrideName,
   getHltbEntryById,
+  getHltbEntryByIdRaw,
+  getHltbFallbackResult,
+  getHltbFallbackResultRaw,
   getHltbLibrarySnapshot,
   getHltbMapping,
+  getHltbMappingRaw,
   getHltbOverrideName,
   getHltbOverrideNames,
+  getHltbUserState,
   getLibrary,
+  ensureHltbUserState,
   setHltbEntryById,
+  setHltbFallbackResult,
   setHltbLibrarySnapshot,
   setHltbMapping,
   setHltbOverrideName,
   setLibrary,
+  touchHltbUserState,
 } from '@/lib/cache/kv'
 
 describe('local cache (unstorage fs)', () => {
@@ -172,6 +184,80 @@ describe('local cache (unstorage fs)', () => {
     )
   })
 
+  it('raw-reads stale HLTB mappings without TTL filtering', async () => {
+    const stale = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString()
+    const cached = {
+      value: {
+        steamAppId: 620,
+        hltbId: 7230,
+        hltbName: 'Portal',
+        discoveredFromSteamId: 'steam-1',
+        discoveredAt: stale,
+      },
+      cachedAt: stale,
+    }
+    getItemMock.mockResolvedValueOnce(cached)
+
+    expect(await getHltbMappingRaw(620)).toEqual(cached)
+    expect(getItemMock).toHaveBeenCalledWith('hltb-map:steam-app:620')
+  })
+
+  it('raw-reads stale HLTB entries without TTL filtering', async () => {
+    const stale = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString()
+    const cached = {
+      value: null,
+      cachedAt: stale,
+    }
+    getItemMock.mockResolvedValueOnce(cached)
+
+    expect(await getHltbEntryByIdRaw(7230)).toEqual(cached)
+    expect(getItemMock).toHaveBeenCalledWith('hltb-entry:hltb-id:7230')
+  })
+
+  it('stores fallback result under user-scoped appid key', async () => {
+    await setHltbFallbackResult('steam-1', {
+      appid: 620,
+      searchName: 'Portal 2007',
+      entry: null,
+      source: 'override-name',
+    })
+
+    expect(setItemMock).toHaveBeenCalledWith(
+      'hltb-fallback-result:steam-1:620',
+      expect.objectContaining({
+        value: {
+          appid: 620,
+          searchName: 'Portal 2007',
+          entry: null,
+          source: 'override-name',
+        },
+      }),
+    )
+  })
+
+  it('TTL-filters fallback result reads', async () => {
+    const stale = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString()
+    getItemMock.mockResolvedValueOnce({
+      value: { appid: 620, searchName: 'Portal', entry: null, source: 'none' },
+      cachedAt: stale,
+    })
+
+    expect(await getHltbFallbackResult('steam-1', 620)).toBeNull()
+    expect(getItemMock).toHaveBeenCalledWith('hltb-fallback-result:steam-1:620')
+  })
+
+  it('raw-reads stale fallback results without TTL filtering', async () => {
+    const stale = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString()
+    const cached = {
+      value: { appid: 620, searchName: 'Portal', entry: null, source: 'none' },
+      cachedAt: stale,
+    }
+    getItemMock.mockResolvedValueOnce(cached)
+
+    expect(await getHltbFallbackResultRaw('steam-1', 620)).toEqual(cached)
+    expect(getItemMock).toHaveBeenCalledWith('hltb-fallback-result:steam-1:620')
+  })
+
   it('stores, reads, and deletes user HLTB override names', async () => {
     getItemMock.mockResolvedValueOnce({
       value: { appid: 620, searchName: 'Portal 2007', updatedAt: 'now' },
@@ -230,6 +316,53 @@ describe('local cache (unstorage fs)', () => {
     expect(await getHltbLibrarySnapshot('steam-1')).toEqual({
       value: { appids: [1], refreshedAt: stale },
       cachedAt: stale,
+    })
+  })
+
+  it('reads user HLTB state under the user-scoped key', async () => {
+    const cached = {
+      value: {
+        revision: 'revision-1',
+        updatedAt: '2026-06-02T10:00:00.000Z',
+      },
+      cachedAt: '2026-06-02T10:00:00.000Z',
+    }
+    getItemMock.mockResolvedValueOnce(cached)
+
+    expect(await getHltbUserState('steam-1')).toEqual(cached)
+    expect(getItemMock).toHaveBeenCalledWith('hltb-user-state:steam-1')
+  })
+
+  it('ensureHltbUserState creates and returns a state when missing', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-06-02T10:00:00.000Z'))
+    getItemMock.mockResolvedValueOnce(null)
+
+    const state = await ensureHltbUserState('steam-1')
+
+    expect(state).toEqual({
+      revision: expect.stringMatching(/^2026-06-02T10:00:00\.000Z:/),
+      updatedAt: '2026-06-02T10:00:00.000Z',
+    })
+    expect(setItemMock).toHaveBeenCalledWith('hltb-user-state:steam-1', {
+      value: state,
+      cachedAt: '2026-06-02T10:00:00.000Z',
+    })
+  })
+
+  it('touches user state with a new opaque revision', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-06-02T10:00:00.000Z'))
+
+    const state = await touchHltbUserState('steam-1')
+
+    expect(state).toEqual({
+      revision: expect.stringMatching(/^2026-06-02T10:00:00\.000Z:/),
+      updatedAt: '2026-06-02T10:00:00.000Z',
+    })
+    expect(setItemMock).toHaveBeenCalledWith('hltb-user-state:steam-1', {
+      value: state,
+      cachedAt: '2026-06-02T10:00:00.000Z',
     })
   })
 })

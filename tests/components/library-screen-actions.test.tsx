@@ -92,7 +92,10 @@ vi.mock('@/hooks/use-library', () => ({
 }))
 
 vi.mock('@/hooks/use-hltb', () => ({
-  HLTB_QUERY_KEY: ['hltb'],
+  HLTB_CACHED_QUERY_KEY: ['hltb', 'cached'],
+  HLTB_QUERY_KEY: ['hltb', 'cached'],
+  HLTB_STATE_QUERY_KEY: ['hltb', 'state'],
+  HLTB_SYNC_QUERY_KEY: ['hltb', 'sync'],
   refreshHltb: (...args: unknown[]) => refreshHltbMock(...(args as [unknown])),
   saveHltbOverrideAndRefresh: (
     args: { appid: number; queryClient: unknown; searchName: string | null },
@@ -215,14 +218,16 @@ describe('LibraryScreen save handler', () => {
 })
 
 describe('LibraryScreen refresh flow', () => {
-  it('refreshes the library and invalidates the HLTB query', async () => {
+  it('refreshes the library and invalidates every HLTB query identity', async () => {
     render(<LibraryScreen />)
 
     fireEvent.click(document.querySelector('[data-testid="refresh-library"]') as HTMLElement)
 
     await waitFor(() => {
       expect(refreshLibraryMock).toHaveBeenCalledWith(queryClient)
-      expect(invalidateQueriesMock).toHaveBeenCalledWith({ queryKey: ['hltb'] })
+      expect(invalidateQueriesMock).toHaveBeenCalledWith({ queryKey: ['hltb', 'state'] })
+      expect(invalidateQueriesMock).toHaveBeenCalledWith({ queryKey: ['hltb', 'cached'] })
+      expect(invalidateQueriesMock).toHaveBeenCalledWith({ queryKey: ['hltb', 'sync'] })
     })
   })
 

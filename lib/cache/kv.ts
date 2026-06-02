@@ -5,9 +5,11 @@ import { KvError } from '@/lib/errors'
 import type {
   Cached,
   HltbEntry,
+  HltbFallbackResult,
   HltbLibrarySnapshot,
   HltbOverrideName,
   HltbSteamMapping,
+  HltbUserState,
   SteamGame,
 } from '@/types/game'
 
@@ -51,7 +53,7 @@ function getStorage(): StorageAdapter {
 }
 
 const LIBRARY_TTL_MS = 60 * 60 * 1000
-const HLTB_TTL_MS = 7 * 24 * 60 * 60 * 1000
+export const HLTB_TTL_MS = 7 * 24 * 60 * 60 * 1000
 export const HLTB_SNAPSHOT_TTL_MS = 12 * 60 * 60 * 1000
 
 function libraryKey(steamId: string) {
@@ -70,12 +72,20 @@ function hltbOverrideNameKey(steamId: string, appid: number) {
   return `hltb-override-name:${steamId}:${appid}`
 }
 
+function hltbFallbackResultKey(steamId: string, appid: number) {
+  return `hltb-fallback-result:${steamId}:${appid}`
+}
+
 function hltbOverrideNamePrefix(steamId: string) {
   return `hltb-override-name:${steamId}:`
 }
 
 function hltbLibrarySnapshotKey(steamId: string) {
   return `hltb-library-snapshot:${steamId}`
+}
+
+function hltbUserStateKey(steamId: string) {
+  return `hltb-user-state:${steamId}`
 }
 
 export function isExpired(cachedAt: string, ttlMs: number): boolean {
@@ -142,6 +152,10 @@ export function getHltbMapping(appid: number) {
   return get<HltbSteamMapping>(hltbMappingKey(appid), HLTB_TTL_MS)
 }
 
+export function getHltbMappingRaw(appid: number) {
+  return getRaw<HltbSteamMapping>(hltbMappingKey(appid))
+}
+
 export function setHltbMapping(mapping: HltbSteamMapping) {
   return set(hltbMappingKey(mapping.steamAppId), mapping)
 }
@@ -150,8 +164,24 @@ export function getHltbEntryById(hltbId: number) {
   return get<HltbEntry | null>(hltbEntryByIdKey(hltbId), HLTB_TTL_MS)
 }
 
+export function getHltbEntryByIdRaw(hltbId: number) {
+  return getRaw<HltbEntry | null>(hltbEntryByIdKey(hltbId))
+}
+
 export function setHltbEntryById(hltbId: number, entry: HltbEntry | null) {
   return set(hltbEntryByIdKey(hltbId), entry)
+}
+
+export function getHltbFallbackResult(steamId: string, appid: number) {
+  return get<HltbFallbackResult>(hltbFallbackResultKey(steamId, appid), HLTB_TTL_MS)
+}
+
+export function getHltbFallbackResultRaw(steamId: string, appid: number) {
+  return getRaw<HltbFallbackResult>(hltbFallbackResultKey(steamId, appid))
+}
+
+export function setHltbFallbackResult(steamId: string, result: HltbFallbackResult) {
+  return set(hltbFallbackResultKey(steamId, result.appid), result)
 }
 
 export function getHltbOverrideName(steamId: string, appid: number) {
@@ -203,4 +233,37 @@ export function setHltbLibrarySnapshot(steamId: string, appids: number[]) {
     appids,
     refreshedAt: now,
   })
+}
+
+export function getHltbUserState(steamId: string) {
+  return getRaw<HltbUserState>(hltbUserStateKey(steamId))
+}
+
+function randomRevisionSuffix() {
+  if (globalThis.crypto && 'randomUUID' in globalThis.crypto) {
+    return globalThis.crypto.randomUUID()
+  }
+  return Math.random().toString(36).slice(2)
+}
+
+function newHltbUserState(): HltbUserState {
+  const updatedAt = new Date().toISOString()
+  return {
+    revision: `${updatedAt}:${randomRevisionSuffix()}`,
+    updatedAt,
+  }
+}
+
+export async function touchHltbUserState(steamId: string): Promise<KvError | HltbUserState> {
+  const state = newHltbUserState()
+  const result = await set(hltbUserStateKey(steamId), state)
+  if (result instanceof Error) return result
+  return state
+}
+
+export async function ensureHltbUserState(steamId: string): Promise<KvError | HltbUserState> {
+  const existing = await getHltbUserState(steamId)
+  if (existing instanceof Error) return existing
+  if (existing !== null) return existing.value
+  return touchHltbUserState(steamId)
 }

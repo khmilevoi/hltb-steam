@@ -6,11 +6,13 @@ const {
   fetchByIdMock,
   fetchSteamImportMock,
   getHltbEntryByIdMock,
+  getHltbFallbackResultMock,
   getHltbLibrarySnapshotMock,
   getHltbMappingMock,
   getHltbOverrideNameMock,
   searchByNameMock,
   setHltbEntryByIdMock,
+  setHltbFallbackResultMock,
   setHltbLibrarySnapshotMock,
   setHltbMappingMock,
   warnMock,
@@ -18,11 +20,13 @@ const {
   fetchByIdMock: vi.fn(),
   fetchSteamImportMock: vi.fn(),
   getHltbEntryByIdMock: vi.fn(),
+  getHltbFallbackResultMock: vi.fn(),
   getHltbLibrarySnapshotMock: vi.fn(),
   getHltbMappingMock: vi.fn(),
   getHltbOverrideNameMock: vi.fn(),
   searchByNameMock: vi.fn(),
   setHltbEntryByIdMock: vi.fn(),
+  setHltbFallbackResultMock: vi.fn(),
   setHltbLibrarySnapshotMock: vi.fn(),
   setHltbMappingMock: vi.fn(),
   warnMock: vi.fn(),
@@ -31,12 +35,14 @@ const {
 vi.mock('@/lib/cache/kv', () => ({
   HLTB_SNAPSHOT_TTL_MS: 12 * 60 * 60 * 1000,
   getHltbEntryById: getHltbEntryByIdMock,
+  getHltbFallbackResult: getHltbFallbackResultMock,
   getHltbLibrarySnapshot: getHltbLibrarySnapshotMock,
   getHltbMapping: getHltbMappingMock,
   getHltbOverrideName: getHltbOverrideNameMock,
   isExpired: (cachedAt: string, ttlMs: number) =>
     Date.now() - new Date(cachedAt).getTime() >= ttlMs,
   setHltbEntryById: setHltbEntryByIdMock,
+  setHltbFallbackResult: setHltbFallbackResultMock,
   setHltbLibrarySnapshot: setHltbLibrarySnapshotMock,
   setHltbMapping: setHltbMappingMock,
 }))
@@ -52,11 +58,13 @@ beforeEach(() => {
   fetchByIdMock.mockReset()
   fetchSteamImportMock.mockReset()
   getHltbEntryByIdMock.mockReset()
+  getHltbFallbackResultMock.mockReset()
   getHltbLibrarySnapshotMock.mockReset()
   getHltbMappingMock.mockReset()
   getHltbOverrideNameMock.mockReset()
   searchByNameMock.mockReset()
   setHltbEntryByIdMock.mockReset()
+  setHltbFallbackResultMock.mockReset()
   setHltbLibrarySnapshotMock.mockReset()
   setHltbMappingMock.mockReset()
   warnMock.mockReset()
@@ -68,9 +76,11 @@ beforeEach(() => {
     cachedAt: new Date().toISOString(),
   })
   getHltbEntryByIdMock.mockResolvedValue(null)
+  getHltbFallbackResultMock.mockResolvedValue(null)
   getHltbOverrideNameMock.mockResolvedValue(null)
   searchByNameMock.mockResolvedValue(null)
   setHltbEntryByIdMock.mockResolvedValue(undefined)
+  setHltbFallbackResultMock.mockResolvedValue(undefined)
   setHltbLibrarySnapshotMock.mockResolvedValue(undefined)
   setHltbMappingMock.mockResolvedValue(undefined)
 })
@@ -226,10 +236,62 @@ describe('resolveHltbForLibrary', () => {
 
     const result = await resolveHltbForGame({ steamId: 'steam-1', game: games[0], force: false })
 
+    expect(setHltbFallbackResultMock).toHaveBeenCalledWith('steam-1', {
+      appid: 1,
+      searchName: 'Portal',
+      entry: null,
+      source: 'none',
+    })
     expect(result).toEqual({
       entry: null,
       cachedAt: null,
       meta: { source: 'none', steamName: 'Portal', overrideName: null },
+    })
+  })
+
+  it('uses fresh fallback result without searching by name', async () => {
+    getHltbMappingMock.mockResolvedValueOnce(null)
+    getHltbOverrideNameMock.mockResolvedValueOnce(null)
+    getHltbFallbackResultMock.mockResolvedValueOnce({
+      value: { appid: 1, searchName: 'Portal', entry: portalEntry, source: 'steam-name' },
+      cachedAt: '2026-06-02T00:00:00.000Z',
+    })
+
+    const result = await resolveHltbForGame({ steamId: 'steam-1', game: games[0], force: false })
+
+    expect(searchByNameMock).not.toHaveBeenCalled()
+    expect(result).toEqual({
+      entry: portalEntry,
+      cachedAt: '2026-06-02T00:00:00.000Z',
+      meta: { source: 'steam-name', steamName: 'Portal', overrideName: null },
+    })
+  })
+
+  it('does not use fallback result when force is true', async () => {
+    getHltbFallbackResultMock.mockResolvedValueOnce({
+      value: { appid: 1, searchName: 'Portal', entry: portalEntry, source: 'steam-name' },
+      cachedAt: '2026-06-02T00:00:00.000Z',
+    })
+    searchByNameMock.mockResolvedValueOnce(portalEntry)
+
+    await resolveHltbForGame({ steamId: 'steam-1', game: games[0], force: true })
+
+    expect(getHltbFallbackResultMock).not.toHaveBeenCalled()
+    expect(searchByNameMock).toHaveBeenCalledWith('Portal')
+  })
+
+  it('marks full-library sync as needed when a row has transient HLTB failure', async () => {
+    searchByNameMock.mockResolvedValueOnce(new HltbRateLimitError({ retryAfterMs: 10_000 }))
+
+    const result = await resolveHltbForLibrary({ steamId: 'steam-1', games: [games[0]], force: false })
+
+    expect(setHltbFallbackResultMock).not.toHaveBeenCalled()
+    expect(result.sync).toMatchObject({
+      needed: true,
+      reason: 'missing-hltb-data',
+      missingAppids: [1],
+      cachedCount: 0,
+      totalCount: 1,
     })
   })
 })
